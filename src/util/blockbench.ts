@@ -2,58 +2,61 @@ import type { Vec2, Vec3 } from '../dts/mesh';
 import { toVec3 } from './geometry';
 import { getMaterialNameFromTextureReference, getTextureByReference } from './materials';
 
-/**
- * Retrieves the UV coordinates for a given cube face. 
- * If the face has UV coordinates defined, it returns them as an array of Vec2 objects representing the four corners of the face. 
- * If the face does not have UV coordinates defined, it defaults to returning UVs that cover the entire texture (0,0 to 1,1).
- * 
- * @param face 
- * @returns An array of Vec2 objects representing the UV coordinates for the corners of the face.
- */
-export function getFaceUv(face: CubeFace): Vec2[] {
+type FaceTextureRef = string | false | Texture | undefined;
+
+function getTextureSize(reference: FaceTextureRef): { width: number; height: number } {
+  const texture = getTextureByReference(reference);
+
+  return {
+    width: texture?.width ?? Project?.texture_width ?? 16,
+    height: texture?.height ?? Project?.texture_height ?? 16
+  };
+}
+
+export function normalizeUv(uv: [number, number], reference: FaceTextureRef): Vec2 {
+  const size = getTextureSize(reference);
+  return [uv[0] / size.width, uv[1] / size.height];
+}
+
+export function getCubeFaceUv(face: CubeFace): Vec2[] {
   const uv = face.uv ?? [0, 0, 0, 0];
   const [u0, v0, u1, v1] = uv;
-  const texture = getTextureByReference(face.texture);
-  const textureWidth = texture?.width ?? Project?.texture_width ?? 16;
-  const textureHeight = texture?.height ?? Project?.texture_height ?? 16;
 
   return [
-    [u0 / textureWidth, v0 / textureHeight],
-    [u1 / textureWidth, v0 / textureHeight],
-    [u1 / textureWidth, v1 / textureHeight],
-    [u0 / textureWidth, v1 / textureHeight]
+    normalizeUv([u0, v0], face.texture),
+    normalizeUv([u1, v0], face.texture),
+    normalizeUv([u1, v1], face.texture),
+    normalizeUv([u0, v1], face.texture)
   ];
 }
 
-/**
- * Retrieves the material name associated with a given cube face. 
- * If the face has a texture defined as a string, it looks up the texture in the global Texture registry to find its name. 
- * If the texture is not found, it returns the texture string itself. 
- * If the face does not have a texture or if the texture is not a string, it returns 'untextured'.
- * 
- * @param face 
- * @returns The name of the material associated with the face, or 'untextured' if no texture is defined.
- */
-export function getMaterialName(face: CubeFace): string {
+export function getMeshFaceVertexKeys(face: MeshFace): string[] {
+  return face.getSortedVertices();
+}
+
+export function getMeshFaceUv(face: MeshFace, vertexKeys: string[]): Vec2[] {
+  return vertexKeys.map((vertexKey) => {
+    const uv = face.uv[vertexKey] ?? [0, 0];
+    return normalizeUv([uv[0], uv[1]], face.texture);
+  });
+}
+
+export function getMaterialName(face: CubeFace | MeshFace): string {
   return getMaterialNameFromTextureReference(face.texture);
 }
 
-/**
- * Determines whether a given cube face is exportable based on its enabled state.
- * 
- * @param face 
- * @returns True if the face is defined and its enabled property is not explicitly set to false; otherwise, false.
- */
-export function isExportableFace(face: CubeFace | undefined): face is CubeFace {
+export function isExportableCubeFace(face: CubeFace | undefined): face is CubeFace {
   return Boolean(face && face.enabled !== false);
 }
 
-/**
- * Retrieves the world vertex positions of a given cube and converts them to Vec3 format.
- * 
- * @param cube 
- * @returns An array of Vec3 objects representing the world vertex positions of the cube.
- */
+export function isExportableMeshFace(face: MeshFace | undefined): face is MeshFace {
+  return Boolean(face && face.vertices.length >= 3 && face.texture !== false);
+}
+
 export function getCubeWorldVertices(cube: Cube): Vec3[] {
   return cube.getGlobalVertexPositions().map((vertex) => toVec3(vertex));
+}
+
+export function getMeshWorldVertex(mesh: Mesh, vertexKey: string): Vec3 {
+  return toVec3(Vertexsnap.getGlobalVertexPos(mesh, vertexKey).toArray());
 }

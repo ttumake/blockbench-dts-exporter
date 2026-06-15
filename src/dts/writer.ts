@@ -1,5 +1,6 @@
 import { DtsBufferWriter } from './buffers';
 import type { ExportMesh, ExportModel, ExportObject, Vec3 } from './mesh';
+import type { ExportConfig } from '../export/config';
 import { computeBounds, computeCenter } from '../util/geometry';
 
 const DTS_VERSION = 24;
@@ -201,7 +202,7 @@ function encodeAsciiBytes(value: string): number[] {
   return bytes;
 }
 
-function buildMaterialTable(objects: ExportObject[]): DtsMaterial[] {
+function buildMaterialTable(objects: ExportObject[], config: ExportConfig): DtsMaterial[] {
   const names = new Set<string>();
 
   for (const object of objects) {
@@ -214,20 +215,29 @@ function buildMaterialTable(objects: ExportObject[]): DtsMaterial[] {
     names.add('blank');
   }
 
-  return Array.from(names).map((name) => ({
-    name,
-    flags:
-      DTS_MATERIAL_S_WRAP |
-      DTS_MATERIAL_T_WRAP |
-      DTS_MATERIAL_NEVER_ENVMAP |
-      DTS_MATERIAL_NO_MIP_MAP |
-      DTS_MATERIAL_MIP_MAP_ZERO_BORDER,
-    reflectanceMap: -1,
-    bumpMap: -1,
-    detailMap: -1,
-    detailScale: 1,
-    reflectance: 0
-  }));
+  let materialFlags = 0;
+  if (config.materialFlags.sWrap) materialFlags |= DTS_MATERIAL_S_WRAP;
+  if (config.materialFlags.tWrap) materialFlags |= DTS_MATERIAL_T_WRAP;
+  if (config.materialFlags.neverEnvMap) materialFlags |= DTS_MATERIAL_NEVER_ENVMAP;
+  if (config.materialFlags.noMipMap) materialFlags |= DTS_MATERIAL_NO_MIP_MAP;
+  if (config.materialFlags.mipMapZeroBorder) materialFlags |= DTS_MATERIAL_MIP_MAP_ZERO_BORDER;
+
+  return Array.from(names).map((name) => {
+    let flags = materialFlags;
+    if (config.materialOverrides[name]?.selfIlluminating) {
+      flags |= 0x00000020;
+    }
+
+    return {
+      name,
+      flags,
+      reflectanceMap: -1,
+      bumpMap: -1,
+      detailMap: -1,
+      detailScale: 1,
+      reflectance: 0
+    };
+  });
 }
 
 function rewriteMaterialIndices(mesh: ExportMesh, materialIndexLookup: Map<string, number>): ExportMesh {
@@ -391,13 +401,13 @@ function encodeMaterialBlock(target: number[], materials: DtsMaterial[]): void {
   }
 }
 
-export function writeDts(model: ExportModel): ArrayBuffer {
+export function writeDts(model: ExportModel, config: ExportConfig): ArrayBuffer {
   const sourceObjects = model.shape.objects.filter((object) => object.mesh.vertices.length > 0);
   if (sourceObjects.length === 0) {
     throw new Error('DTS export requires at least one mesh object.');
   }
 
-  const materials = buildMaterialTable(sourceObjects);
+  const materials = buildMaterialTable(sourceObjects, config);
   const materialIndexLookup = new Map<string, number>();
   materials.forEach((material, index) => materialIndexLookup.set(material.name, index));
 

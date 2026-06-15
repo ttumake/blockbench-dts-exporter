@@ -1,8 +1,8 @@
 /// <reference types="blockbench-types" />
 
 import { collectModel } from './blockbench/collect-model';
-import { writeDts } from './dts/writer';
-import { ExportTextureAsset, transformModelToBlocklandColors } from './util/materials';
+import { showExportDialog } from './export/dialog';
+import type { ExportTextureAsset } from './util/materials';
 import { PLUGIN_SNAPSHOT, PLUGIN_VERSION } from './version';
 
 function exportTextureAssets(basePath: string, textureAssets: ExportTextureAsset[]): void {
@@ -34,21 +34,19 @@ BBPlugin.register('dts_exporter', {
     // Add an action to export the model as Torque DTS
     exportAction = new Action('export_torque_dts', {
       name: 'Export Torque DTS',
-      description: 'Export model as Torque DTS',
+      description: 'Open DTS export options',
       icon: 'deployed_code',
       click() {
-        const collectedModel = collectModel(Project?.name ?? 'unnamed');
-        const blocklandExport = transformModelToBlocklandColors(collectedModel);
-        const content = writeDts(blocklandExport.model);
-
-        Filesystem.exportFile({
-          type: 'Torque DTS Model',
-          extensions: ['dts'],
-          name: Project?.name || 'model',
-          savetype: 'binary',
-          content
-        }, (filePath) => {
-          exportTextureAssets(filePath, blocklandExport.textures);
+        showExportDialog(Project?.name ?? 'unnamed', ({ packageData }) => {
+          Filesystem.exportFile({
+            type: 'Torque DTS Model',
+            extensions: ['dts'],
+            name: Project?.name || 'model',
+            savetype: 'binary',
+            content: packageData.content
+          }, (filePath) => {
+            exportTextureAssets(filePath, packageData.textures);
+          });
         });
       }
     });

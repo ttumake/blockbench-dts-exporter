@@ -11,12 +11,6 @@ type Rgba = [number, number, number, number];
 
 const TEXTURE_BLEED_PASSES = 4;
 const BLOCKLAND_TEXTURE_SIZE = 16;
-const FULL_FACE_UVS: Vec2[] = [
-  [0, 0],
-  [1, 0],
-  [1, 1],
-  [0, 1]
-];
 
 const NAMED_COLOR_PALETTE: Array<{ name: string; color: Rgba }> = [
   { name: 'white', color: [255, 255, 255, 255] },
@@ -203,33 +197,34 @@ function createSolidTextureDataUrl(color: Rgba): string {
   return canvas.toDataURL('image/png');
 }
 
-function getCubeFaceByExportFace(exportFace: ExportFace): CubeFace | undefined {
-  const cube = Cube.all.find((entry) => entry.uuid === exportFace.cubeId);
-  if (!cube) {
-    return undefined;
+function getSourceFace(exportFace: ExportFace): CubeFace | MeshFace | undefined {
+  if (exportFace.elementType === 'cube') {
+    const cube = Cube.all.find((entry) => entry.uuid === exportFace.elementId);
+    return cube?.faces[exportFace.faceKey as keyof Cube['faces']];
   }
 
-  return cube.faces[exportFace.face];
+  const mesh = Mesh.all.find((entry) => entry.uuid === exportFace.elementId);
+  return mesh?.faces[exportFace.faceKey];
 }
 
-function sampleFaceColor(face: CubeFace): Rgba {
-  const texture = getTextureByReference(face.texture);
-  if (!texture) {
-    return [255, 255, 255, 255];
-  }
-
-  const canvas = texture.canvas;
-  const context = canvas.getContext('2d');
-  if (!context) {
-    return [255, 255, 255, 255];
-  }
-
-  const [u0, v0, u1, v1] = face.uv ?? [0, 0, 1, 1];
-  const minX = Math.max(0, Math.min(canvas.width - 1, Math.floor(Math.min(u0, u1))));
-  const maxX = Math.max(minX + 1, Math.min(canvas.width, Math.ceil(Math.max(u0, u1))));
-  const minY = Math.max(0, Math.min(canvas.height - 1, Math.floor(Math.min(v0, v1))));
-  const maxY = Math.max(minY + 1, Math.min(canvas.height, Math.ceil(Math.max(v0, v1))));
-  const image = context.getImageData(minX, minY, maxX - minX, maxY - minY).data;
+function sampleImageRegion(
+  context: CanvasRenderingContext2D,
+  canvas: HTMLCanvasElement,
+  minX: number,
+  minY: number,
+  maxX: number,
+  maxY: number
+): Rgba {
+  const clampedMinX = Math.max(0, Math.min(canvas.width - 1, Math.floor(minX)));
+  const clampedMaxX = Math.max(clampedMinX + 1, Math.min(canvas.width, Math.ceil(maxX)));
+  const clampedMinY = Math.max(0, Math.min(canvas.height - 1, Math.floor(minY)));
+  const clampedMaxY = Math.max(clampedMinY + 1, Math.min(canvas.height, Math.ceil(maxY)));
+  const image = context.getImageData(
+    clampedMinX,
+    clampedMinY,
+    clampedMaxX - clampedMinX,
+    clampedMaxY - clampedMinY
+  ).data;
 
   let red = 0;
   let green = 0;
@@ -260,6 +255,74 @@ function sampleFaceColor(face: CubeFace): Rgba {
     clampByte(blue / samples),
     clampByte(alpha / samples)
   ];
+}
+
+function sampleCubeFaceColor(face: CubeFace): Rgba {
+  const texture = getTextureByReference(face.texture);
+  if (!texture) {
+    return [255, 255, 255, 255];
+  }
+
+  const canvas = texture.canvas;
+  const context = canvas.getContext('2d');
+  if (!context) {
+    return [255, 255, 255, 255];
+  }
+
+  const [u0, v0, u1, v1] = face.uv ?? [0, 0, 1, 1];
+  return sampleImageRegion(
+    context,
+    canvas,
+    Math.min(u0, u1),
+    Math.min(v0, v1),
+    Math.max(u0, u1),
+    Math.max(v0, v1)
+  );
+}
+
+function sampleMeshFaceColor(face: MeshFace): Rgba {
+  const texture = getTextureByReference(face.texture);
+  if (!texture) {
+    return [255, 255, 255, 255];
+  }
+
+  const canvas = texture.canvas;
+  const context = canvas.getContext('2d');
+  if (!context) {
+    return [255, 255, 255, 255];
+  }
+
+  const rect = face.getBoundingRect();
+  return sampleImageRegion(context, canvas, rect.ax ?? rect.x, rect.ay ?? rect.y, rect.bx ?? rect.x + rect.w, rect.by ?? rect.y + rect.h);
+}
+
+function sampleSourceFaceColor(face: CubeFace | MeshFace): Rgba {
+  if (face instanceof MeshFace) {
+    return sampleMeshFaceColor(face);
+  }
+
+  return sampleCubeFaceColor(face);
+}
+
+function remapFaceUvsToFullTexture(mesh: ExportMesh, exportFace: ExportFace): void {
+  const faceUvs = mesh.uvs.slice(exportFace.vertexStart, exportFace.vertexStart + exportFace.vertexCount);
+  if (faceUvs.length === 0) {
+    return;
+  }
+
+  const uValues = faceUvs.map(([u]) => u);
+  const vValues = faceUvs.map(([, v]) => v);
+  const minU = Math.min(...uValues);
+  const maxU = Math.max(...uValues);
+  const minV = Math.min(...vValues);
+  const maxV = Math.max(...vValues);
+  const width = maxU - minU || 1;
+  const height = maxV - minV || 1;
+
+  for (let offset = 0; offset < exportFace.vertexCount; offset += 1) {
+    const [u, v] = faceUvs[offset];
+    mesh.uvs[exportFace.vertexStart + offset] = [(u - minU) / width, (v - minV) / height];
+  }
 }
 
 function cloneMesh(mesh: ExportMesh): ExportMesh {
@@ -315,8 +378,8 @@ export function transformModelToBlocklandColors(model: ExportModel): {
 
   for (const object of transformedObjects) {
     for (const exportFace of object.mesh.faces) {
-      const cubeFace = getCubeFaceByExportFace(exportFace);
-      const sampledColor: Rgba = cubeFace ? sampleFaceColor(cubeFace) : [255, 255, 255, 255];
+      const sourceFace = getSourceFace(exportFace);
+      const sampledColor: Rgba = sourceFace ? sampleSourceFaceColor(sourceFace) : [255, 255, 255, 255];
       const colorKey = rgbaToHex(sampledColor);
       let materialName = colorToMaterialName.get(colorKey);
 
@@ -329,10 +392,7 @@ export function transformModelToBlocklandColors(model: ExportModel): {
       }
 
       exportFace.materialName = materialName;
-
-      for (let offset = 0; offset < exportFace.vertexCount; offset += 1) {
-        object.mesh.uvs[exportFace.vertexStart + offset] = [...FULL_FACE_UVS[offset]];
-      }
+      remapFaceUvsToFullTexture(object.mesh, exportFace);
 
       if (!assets.has(materialName)) {
         const assetColor: Rgba = [...sampledColor];
@@ -413,4 +473,14 @@ export function collectUsedTextureAssets(): ExportTextureAsset[] {
   }
 
   return Array.from(assets.values());
+}
+
+export function createAtlasTextureExport(model: ExportModel): {
+  model: ExportModel;
+  textures: ExportTextureAsset[];
+} {
+  return {
+    model,
+    textures: collectUsedTextureAssets()
+  };
 }

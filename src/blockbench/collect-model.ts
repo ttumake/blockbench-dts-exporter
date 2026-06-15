@@ -5,13 +5,18 @@ import type {
   ExportNode,
   ExportObject,
   ExportShape,
+  Vec2,
   Vec3
 } from '../dts/mesh';
 import {
+  getCubeFaceUv,
   getCubeWorldVertices,
-  getFaceUv,
   getMaterialName,
-  isExportableFace
+  getMeshFaceUv,
+  getMeshFaceVertexKeys,
+  getMeshWorldVertex,
+  isExportableCubeFace,
+  isExportableMeshFace
 } from '../util/blockbench';
 import { computeBounds, createEmptyMesh, toVec3 } from '../util/geometry';
 
@@ -27,22 +32,39 @@ function getNodeLocalTransform(node: Group): ExportNode['localTransform'] {
   };
 }
 
-function getCubeLocalTransform(cube: Cube): ExportObject['localTransform'] {
+function getElementLocalTransform(element: Cube | Mesh): ExportObject['localTransform'] {
   return {
-    origin: toVec3(cube.origin),
-    rotation: toVec3(cube.rotation)
+    origin: toVec3(element.origin),
+    rotation: toVec3(element.rotation)
   };
+}
+
+function triangulateFaceIndices(vertexStart: number, vertexCount: number): number[] {
+  const indices: number[] = [];
+
+  for (let offset = 1; offset < vertexCount - 1; offset += 1) {
+    indices.push(vertexStart, vertexStart + offset, vertexStart + offset + 1);
+  }
+
+  return indices;
 }
 
 function appendFace(
   mesh: ExportMesh,
-  cube: Cube,
-  faceName: CubeFaceKey,
-  face: CubeFace,
-  cubeVertices: Vec3[]
+  source: {
+    elementId: string;
+    elementName: string;
+    elementType: 'cube' | 'mesh';
+    faceKey: string;
+  },
+  vertices: Vec3[],
+  uvs: Vec2[],
+  materialName: string
 ): void {
-  const faceVertexIndices = face.getVertexIndices();
-  const materialName = getMaterialName(face);
+  if (vertices.length < 3 || vertices.length !== uvs.length) {
+    return;
+  }
+
   let materialIndex = mesh.materialNames.indexOf(materialName);
 
   if (materialIndex === -1) {
@@ -51,58 +73,124 @@ function appendFace(
 
   const vertexStart = mesh.vertices.length;
   const indexStart = mesh.indices.length;
-  const uvs = getFaceUv(face);
 
-  for (const vertexIndex of faceVertexIndices) {
-    mesh.vertices.push(cubeVertices[vertexIndex]);
-  }
-
+  mesh.vertices.push(...vertices);
   mesh.uvs.push(...uvs);
-  mesh.indices.push(
-    vertexStart,
-    vertexStart + 1,
-    vertexStart + 2,
-    vertexStart,
-    vertexStart + 2,
-    vertexStart + 3
-  );
+  mesh.indices.push(...triangulateFaceIndices(vertexStart, vertices.length));
 
   const exportFace: ExportFace = {
-    cubeId: cube.uuid,
-    cubeName: cube.name,
-    face: faceName,
+    ...source,
     materialIndex,
     materialName,
     vertexStart,
-    vertexCount: 4,
+    vertexCount: vertices.length,
     indexStart,
-    indexCount: 6
+    indexCount: mesh.indices.length - indexStart
   };
 
   mesh.faces.push(exportFace);
+}
+
+function appendCubeFace(
+  mesh: ExportMesh,
+  cube: Cube,
+  faceKey: CubeFaceKey,
+  face: CubeFace,
+  cubeVertices: Vec3[]
+): void {
+  const faceVertexIndices = face.getVertexIndices();
+
+  appendFace(
+    mesh,
+    {
+      elementId: cube.uuid,
+      elementName: cube.name,
+      elementType: 'cube',
+      faceKey
+    },
+    faceVertexIndices.map((vertexIndex) => cubeVertices[vertexIndex]),
+    getCubeFaceUv(face),
+    getMaterialName(face)
+  );
+}
+
+function appendMeshFace(mesh: ExportMesh, sourceMesh: Mesh, face: MeshFace, faceKey: string): void {
+  const vertexKeys = getMeshFaceVertexKeys(face).slice().reverse();
+
+  appendFace(
+    mesh,
+    {
+      elementId: sourceMesh.uuid,
+      elementName: sourceMesh.name,
+      elementType: 'mesh',
+      faceKey
+    },
+    vertexKeys.map((vertexKey) => getMeshWorldVertex(sourceMesh, vertexKey)),
+    getMeshFaceUv(face, vertexKeys),
+    getMaterialName(face)
+  );
 }
 
 function createObjectFromCube(cube: Cube, parentNodeId: string): ExportObject {
   const mesh = createEmptyMesh();
   const cubeVertices = getCubeWorldVertices(cube);
 
-  for (const faceName of FACE_KEYS) {
-    const face = cube.faces[faceName];
-    if (!isExportableFace(face)) {
+  for (const faceKey of FACE_KEYS) {
+    const face = cube.faces[faceKey];
+    if (!isExportableCubeFace(face)) {
       continue;
     }
 
-    appendFace(mesh, cube, faceName, face, cubeVertices);
+    appendCubeFace(mesh, cube, faceKey, face, cubeVertices);
   }
 
   return {
     id: cube.uuid,
     name: cube.name,
     parentNodeId,
-    localTransform: getCubeLocalTransform(cube),
+    localTransform: getElementLocalTransform(cube),
     worldBounds: computeBounds(mesh.vertices),
     mesh
   };
+}
+
+function createObjectFromMesh(sourceMesh: Mesh, parentNodeId: string): ExportObject {
+  const mesh = createEmptyMesh();
+
+  sourceMesh.forAllFaces((face, faceKey) => {
+    if (!isExportableMeshFace(face)) {
+      return;
+    }
+
+    appendMeshFace(mesh, sourceMesh, face, faceKey);
+  });
+
+  return {
+    id: sourceMesh.uuid,
+    name: sourceMesh.name,
+    parentNodeId,
+    localTransform: getElementLocalTransform(sourceMesh),
+    worldBounds: computeBounds(mesh.vertices),
+    mesh
+  };
+}
+
+function appendExportObject(
+  element: Cube | Mesh,
+  parentNodeId: string,
+  objects: ExportObject[],
+  objectIds: string[]
+): void {
+  const object = element instanceof Cube
+    ? createObjectFromCube(element, parentNodeId)
+    : createObjectFromMesh(element, parentNodeId);
+
+  if (object.mesh.vertices.length === 0) {
+    return;
+  }
+
+  objects.push(object);
+  objectIds.push(object.id);
 }
 
 function collectNodeRecursive(
@@ -129,23 +217,19 @@ function collectNodeRecursive(
       continue;
     }
 
-    if (child instanceof Cube) {
-      const object = createObjectFromCube(child, sourceNode.uuid);
-      objects.push(object);
-      exportNode.objectIds.push(object.id);
+    if (child instanceof Cube || child instanceof Mesh) {
+      appendExportObject(child, sourceNode.uuid, objects, exportNode.objectIds);
     }
   }
 }
 
-function collectRootLevelCubes(rootNode: ExportNode, objects: ExportObject[]): void {
+function collectRootLevelElements(rootNode: ExportNode, objects: ExportObject[]): void {
   for (const node of Outliner.root) {
-    if (!(node instanceof Cube)) {
+    if (!(node instanceof Cube || node instanceof Mesh)) {
       continue;
     }
 
-    const object = createObjectFromCube(node, ROOT_NODE_ID);
-    objects.push(object);
-    rootNode.objectIds.push(object.id);
+    appendExportObject(node, ROOT_NODE_ID, objects, rootNode.objectIds);
   }
 }
 
@@ -173,7 +257,7 @@ function buildShape(): ExportShape {
     }
   }
 
-  collectRootLevelCubes(rootNode, objects);
+  collectRootLevelElements(rootNode, objects);
 
   const names = Array.from(
     new Set([
@@ -206,6 +290,7 @@ export function collectModel(projectName: string): ExportModel {
       nodeCount: shape.nodes.length,
       objectCount: shape.objects.length,
       cubeCount: Cube.all.length,
+      meshCount: Mesh.all.length,
       vertexCount: totalVertexCount,
       indexCount: totalIndexCount,
       triangleCount: totalIndexCount / 3,

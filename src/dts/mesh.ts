@@ -7,9 +7,10 @@ export type ExportTransform = {
 };
 
 export type ExportFace = {
-  cubeId: string;
-  cubeName: string;
-  face: string;
+  elementId: string;
+  elementName: string;
+  elementType: 'cube' | 'mesh';
+  faceKey: string;
   materialIndex: number;
   materialName: string;
   vertexStart: number;
@@ -64,6 +65,7 @@ export type ExportModel = {
     nodeCount: number;
     objectCount: number;
     cubeCount: number;
+    meshCount: number;
     vertexCount: number;
     indexCount: number;
     triangleCount: number;
