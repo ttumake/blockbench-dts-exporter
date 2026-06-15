@@ -1,5 +1,6 @@
 import { DtsBufferWriter } from './buffers';
 import type { ExportMesh, ExportModel, ExportObject, Vec3 } from './mesh';
+import { computeBounds, computeCenter } from '../util/geometry';
 
 const DTS_VERSION = 24;
 const DTS_EXPORTER_VERSION = 0;
@@ -8,6 +9,8 @@ const DTS_PRIMITIVE_INDEXED = 0x20000000;
 const DTS_MATERIAL_S_WRAP = 0x00000001;
 const DTS_MATERIAL_T_WRAP = 0x00000002;
 const DTS_MATERIAL_NEVER_ENVMAP = 0x00000040;
+const DTS_MATERIAL_NO_MIP_MAP = 0x00000080;
+const DTS_MATERIAL_MIP_MAP_ZERO_BORDER = 0x00000100;
 
 type DtsNode = {
   nameIndex: number;
@@ -114,37 +117,6 @@ function normalize(value: Vec3): Vec3 {
   return [value[0] / valueLength, value[1] / valueLength, value[2] / valueLength];
 }
 
-function computeBounds(vertices: Vec3[]): { min: Vec3; max: Vec3 } {
-  if (vertices.length === 0) {
-    return {
-      min: [0, 0, 0],
-      max: [0, 0, 0]
-    };
-  }
-
-  const min: Vec3 = [...vertices[0]];
-  const max: Vec3 = [...vertices[0]];
-
-  for (const [x, y, z] of vertices) {
-    min[0] = Math.min(min[0], x);
-    min[1] = Math.min(min[1], y);
-    min[2] = Math.min(min[2], z);
-    max[0] = Math.max(max[0], x);
-    max[1] = Math.max(max[1], y);
-    max[2] = Math.max(max[2], z);
-  }
-
-  return { min, max };
-}
-
-function computeCenter(min: Vec3, max: Vec3): Vec3 {
-  return [
-    (min[0] + max[0]) * 0.5,
-    (min[1] + max[1]) * 0.5,
-    (min[2] + max[2]) * 0.5
-  ];
-}
-
 function computeRadius(vertices: Vec3[], center: Vec3): number {
   let radius = 0;
 
@@ -244,7 +216,12 @@ function buildMaterialTable(objects: ExportObject[]): DtsMaterial[] {
 
   return Array.from(names).map((name) => ({
     name,
-    flags: DTS_MATERIAL_S_WRAP | DTS_MATERIAL_T_WRAP | DTS_MATERIAL_NEVER_ENVMAP,
+    flags:
+      DTS_MATERIAL_S_WRAP |
+      DTS_MATERIAL_T_WRAP |
+      DTS_MATERIAL_NEVER_ENVMAP |
+      DTS_MATERIAL_NO_MIP_MAP |
+      DTS_MATERIAL_MIP_MAP_ZERO_BORDER,
     reflectanceMap: -1,
     bumpMap: -1,
     detailMap: -1,

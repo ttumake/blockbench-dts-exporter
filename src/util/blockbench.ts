@@ -1,5 +1,6 @@
 import type { Vec2, Vec3 } from '../dts/mesh';
 import { toVec3 } from './geometry';
+import { getMaterialNameFromTextureReference, getTextureByReference } from './materials';
 
 /**
  * Retrieves the UV coordinates for a given cube face. 
@@ -12,12 +13,15 @@ import { toVec3 } from './geometry';
 export function getFaceUv(face: CubeFace): Vec2[] {
   const uv = face.uv ?? [0, 0, 0, 0];
   const [u0, v0, u1, v1] = uv;
+  const texture = getTextureByReference(face.texture);
+  const textureWidth = texture?.width ?? Project?.texture_width ?? 16;
+  const textureHeight = texture?.height ?? Project?.texture_height ?? 16;
 
   return [
-    [u0, v0],
-    [u1, v0],
-    [u1, v1],
-    [u0, v1]
+    [u0 / textureWidth, v0 / textureHeight],
+    [u1 / textureWidth, v0 / textureHeight],
+    [u1 / textureWidth, v1 / textureHeight],
+    [u0 / textureWidth, v1 / textureHeight]
   ];
 }
 
@@ -31,12 +35,7 @@ export function getFaceUv(face: CubeFace): Vec2[] {
  * @returns The name of the material associated with the face, or 'untextured' if no texture is defined.
  */
 export function getMaterialName(face: CubeFace): string {
-  if (typeof face.texture === 'string') {
-    const texture = Texture.all.find((entry) => entry.uuid === face.texture);
-    return texture?.name ?? face.texture;
-  }
-
-  return 'untextured';
+  return getMaterialNameFromTextureReference(face.texture);
 }
 
 /**

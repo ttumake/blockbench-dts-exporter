@@ -54,3 +54,11 @@ export function computeBounds(vertices: Vec3[]): { min: Vec3; max: Vec3 } {
 
   return { min, max };
 }
+
+export function computeCenter(min: Vec3, max: Vec3): Vec3 {
+  return [
+    (min[0] + max[0]) * 0.5,
+    (min[1] + max[1]) * 0.5,
+    (min[2] + max[2]) * 0.5
+  ];
+}

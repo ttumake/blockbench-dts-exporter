@@ -2,6 +2,19 @@
 
 import { collectModel } from './blockbench/collect-model';
 import { writeDts } from './dts/writer';
+import { ExportTextureAsset, transformModelToBlocklandColors } from './util/materials';
+import { PLUGIN_SNAPSHOT, PLUGIN_VERSION } from './version';
+
+function exportTextureAssets(basePath: string, textureAssets: ExportTextureAsset[]): void {
+  const outputDirectory = PathModule.dirname(basePath);
+
+  for (const asset of textureAssets) {
+    Filesystem.writeFile(PathModule.join(outputDirectory, asset.fileName), {
+      content: asset.dataUrl,
+      savetype: 'image'
+    });
+  }
+}
 
 let exportAction: Action;
 let exportJsonAction: Action;
@@ -9,13 +22,14 @@ let exportJsonAction: Action;
 BBPlugin.register('dts_exporter', {
   title: 'Torque DTS Exporter',
   author: 'Markus A. Vallin',
-  description: 'Exports Blockbench models to Torque DTS format.',
+  description: `Exports Blockbench models to Torque DTS format. Snapshot: ${PLUGIN_SNAPSHOT}`,
   icon: 'deployed_code',
-  version: '0.1.0',
+  version: PLUGIN_VERSION,
   variant: 'desktop',
   min_version: '5.1.4',
 
   onload() {
+    console.log(`[dts_exporter] loaded v${PLUGIN_VERSION} (${PLUGIN_SNAPSHOT})`);
 
     // Add an action to export the model as Torque DTS
     exportAction = new Action('export_torque_dts', {
@@ -23,14 +37,18 @@ BBPlugin.register('dts_exporter', {
       description: 'Export model as Torque DTS',
       icon: 'deployed_code',
       click() {
-        const model = collectModel(Project?.name ?? 'unnamed');
+        const collectedModel = collectModel(Project?.name ?? 'unnamed');
+        const blocklandExport = transformModelToBlocklandColors(collectedModel);
+        const content = writeDts(blocklandExport.model);
 
-        Blockbench.export({
+        Filesystem.exportFile({
           type: 'Torque DTS Model',
           extensions: ['dts'],
           name: Project?.name || 'model',
           savetype: 'binary',
-          content: writeDts(model)
+          content
+        }, (filePath) => {
+          exportTextureAssets(filePath, blocklandExport.textures);
         });
       }
     });

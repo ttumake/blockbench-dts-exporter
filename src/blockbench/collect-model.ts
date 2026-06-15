@@ -68,6 +68,7 @@ function appendFace(
   );
 
   const exportFace: ExportFace = {
+    cubeId: cube.uuid,
     cubeName: cube.name,
     face: faceName,
     materialIndex,

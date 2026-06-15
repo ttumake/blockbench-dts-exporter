@@ -7,6 +7,7 @@ export type ExportTransform = {
 };
 
 export type ExportFace = {
+  cubeId: string;
   cubeName: string;
   face: string;
   materialIndex: number;
