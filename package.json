@@ -1,0 +1,20 @@
+{
+  "name": "blockbench-dts-exporter",
+  "version": "1.0.0",
+  "author": "Markus A. Vallin",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "esbuild src/plugin.ts --bundle --format=iife --outfile=dist/dts_exporter.js",
+    "watch": "npm run build -- --watch"
+  },
+  "keywords": [],
+  "license": "ISC",
+  "type": "module",
+  "devDependencies": {
+    "blockbench-types": "^5.1.0",
+    "esbuild": "^0.28.1",
+    "typescript": "^6.0.3"
+  }
+}
