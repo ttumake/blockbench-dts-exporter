@@ -56,10 +56,12 @@ function normalizeMaterialOverrides(
 
 function readBaseConfig(dialog: Dialog): Omit<ExportConfig, 'materialOverrides'> {
   const values = dialog.getFormResult();
+  const scale = Number(values.scale);
 
   return {
     mode: values.mode as ExportConfig['mode'],
     orientation: values.orientation as ExportConfig['orientation'],
+    scale: Number.isFinite(scale) && scale > 0 ? scale : DEFAULT_EXPORT_CONFIG.scale,
     materialFlags: {
       sWrap: Boolean(values.s_wrap),
       tWrap: Boolean(values.t_wrap),
@@ -88,6 +90,7 @@ function formatPreview(
   return [
     `Mode: ${packageData.mode}`,
     `Orientation: ${config.orientation === 'blockland_swap_yz_flip_xz' ? 'Blockland Default' : 'None'}`,
+    `Scale: ${config.scale}`,
     `Generated textures: ${packageData.textureCount}`,
     `Glow materials: ${glowingCount}`,
     '',
@@ -212,6 +215,13 @@ export function showExportDialog(projectName: string, onConfirmExport: ConfirmCa
           blockland_swap_yz_flip_xz: 'Blockland Default',
           none: 'None'
         }
+      },
+      scale: {
+        label: 'Scale',
+        type: 'number',
+        value: DEFAULT_EXPORT_CONFIG.scale,
+        min: 0.0001,
+        step: 0.01
       },
       s_wrap: {
         label: 'S Wrap',

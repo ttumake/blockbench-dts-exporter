@@ -16,8 +16,9 @@ type ColorMaterialCluster = {
 };
 
 const TEXTURE_BLEED_PASSES = 4;
-const BLOCKLAND_TEXTURE_SIZE = 16;
-const BLOCKLAND_COLOR_MERGE_DISTANCE_SQ = 24 * 24 * 3;
+const BLOCKLAND_TEXTURE_SIZE = 8;
+const BLOCKLAND_COLOR_MERGE_DISTANCE_SQ = 40 * 40 * 3;
+const BLOCKLAND_COLOR_MAX_CHANNEL_DELTA = 40;
 
 const NAMED_COLOR_PALETTE: Array<{ name: string; color: Rgba }> = [
   { name: 'white', color: [255, 255, 255, 255] },
@@ -164,6 +165,14 @@ function colorDistance(a: Rgba, b: Rgba): number {
   return dr * dr + dg * dg + db * db;
 }
 
+function maxChannelDelta(a: Rgba, b: Rgba): number {
+  return Math.max(
+    Math.abs(a[0] - b[0]),
+    Math.abs(a[1] - b[1]),
+    Math.abs(a[2] - b[2])
+  );
+}
+
 function clampByte(value: number): number {
   return Math.max(0, Math.min(255, Math.round(value)));
 }
@@ -229,7 +238,11 @@ function findReusableColorCluster(
     }
 
     const distance = colorDistance(color, cluster.representativeColor);
-    if (distance > BLOCKLAND_COLOR_MERGE_DISTANCE_SQ || distance >= bestDistance) {
+    if (
+      distance > BLOCKLAND_COLOR_MERGE_DISTANCE_SQ ||
+      maxChannelDelta(color, cluster.representativeColor) > BLOCKLAND_COLOR_MAX_CHANNEL_DELTA ||
+      distance >= bestDistance
+    ) {
       continue;
     }
 

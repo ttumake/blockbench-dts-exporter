@@ -6,6 +6,31 @@ export type ExportTransform = {
   rotation: Vec3;
 };
 
+export type ExportSequenceMarker = {
+  name: string;
+  time: number;
+};
+
+export type ExportSequenceTrack = {
+  targetId: string;
+  targetName: string;
+  channel: string;
+  keyframeCount: number;
+  keyframeTimes: number[];
+  keyframeValues: Vec3[];
+  interpolationModes: string[];
+};
+
+export type ExportSequence = {
+  id: string;
+  name: string;
+  loop: 'once' | 'hold' | 'loop';
+  length: number;
+  snapping: number;
+  markers: ExportSequenceMarker[];
+  tracks: ExportSequenceTrack[];
+};
+
 export type ExportFace = {
   elementId: string;
   elementName: string;
@@ -61,6 +86,7 @@ export type ExportShape = {
 export type ExportModel = {
   project: string;
   shape: ExportShape;
+  sequences: ExportSequence[];
   summary: {
     nodeCount: number;
     objectCount: number;
@@ -70,5 +96,7 @@ export type ExportModel = {
     indexCount: number;
     triangleCount: number;
     materialCount: number;
+    sequenceCount: number;
+    animationTrackCount: number;
   };
 };

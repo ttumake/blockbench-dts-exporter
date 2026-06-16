@@ -4,6 +4,8 @@ import type {
   ExportModel,
   ExportNode,
   ExportObject,
+  ExportSequence,
+  ExportSequenceTrack,
   ExportShape,
   Vec2,
   Vec3
@@ -325,15 +327,104 @@ function buildShape(): ExportShape {
   };
 }
 
+function getAnimatorTargetName(animator: GeneralAnimator): string {
+  if (typeof (animator as BoneAnimator).name === 'string' && (animator as BoneAnimator).name.length > 0) {
+    return (animator as BoneAnimator).name;
+  }
+
+  const runtimeAnimator = animator as any;
+  const node = runtimeAnimator.node ?? runtimeAnimator.group ?? runtimeAnimator.element;
+  if (node?.name) {
+    return String(node.name);
+  }
+
+  return String(animator.uuid ?? 'unknown');
+}
+
+function toKeyframeVec3(keyframe: _Keyframe): Vec3 {
+  const raw = keyframe.getArray(0);
+  const x = Number(raw[0] ?? 0);
+  const y = Number(raw[1] ?? 0);
+  const z = Number(raw[2] ?? 0);
+  return [x, y, z];
+}
+
+function collectAnimatorTracks(animator: GeneralAnimator): ExportSequenceTrack[] {
+  const targetId = String(animator.uuid ?? '');
+  if (!targetId) {
+    return [];
+  }
+
+  const targetName = getAnimatorTargetName(animator);
+  const keyframes = Array.isArray(animator.keyframes) ? animator.keyframes : [];
+  const tracksByChannel = new Map<string, _Keyframe[]>();
+
+  for (const keyframe of keyframes) {
+    const channel = keyframe.channel;
+    if (!channel) {
+      continue;
+    }
+
+    const channelKeyframes = tracksByChannel.get(channel) ?? [];
+    channelKeyframes.push(keyframe);
+    tracksByChannel.set(channel, channelKeyframes);
+  }
+
+  const tracks: ExportSequenceTrack[] = [];
+
+  for (const [channel, channelKeyframes] of tracksByChannel) {
+    const sortedKeyframes = channelKeyframes
+      .slice()
+      .sort((a, b) => a.time - b.time);
+
+    tracks.push({
+      targetId,
+      targetName,
+      channel,
+      keyframeCount: sortedKeyframes.length,
+      keyframeTimes: sortedKeyframes.map((keyframe) => keyframe.time),
+      keyframeValues: sortedKeyframes.map((keyframe) => toKeyframeVec3(keyframe)),
+      interpolationModes: Array.from(new Set(sortedKeyframes.map((keyframe) => keyframe.interpolation)))
+    });
+  }
+
+  return tracks;
+}
+
+function collectSequences(): ExportSequence[] {
+  const animations = Array.isArray(Animator.animations) ? Animator.animations : [];
+
+  return animations.map((animation) => {
+    const animators = Object.values(animation.animators ?? {});
+    const tracks = animators.flatMap((animator) => collectAnimatorTracks(animator));
+
+    return {
+      id: animation.uuid,
+      name: animation.name,
+      loop: animation.loop,
+      length: animation.length,
+      snapping: animation.snapping,
+      markers: (animation.markers ?? []).map((marker) => ({
+        name: String((marker as any).name ?? ''),
+        time: marker.time
+      })),
+      tracks
+    };
+  });
+}
+
 export function collectModel(projectName: string): ExportModel {
   const shape = buildShape();
+  const sequences = collectSequences();
   const totalVertexCount = shape.objects.reduce((sum, object) => sum + object.mesh.vertices.length, 0);
   const totalIndexCount = shape.objects.reduce((sum, object) => sum + object.mesh.indices.length, 0);
   const materialNames = new Set(shape.objects.flatMap((object) => object.mesh.materialNames));
+  const animationTrackCount = sequences.reduce((sum, sequence) => sum + sequence.tracks.length, 0);
 
   return {
     project: projectName,
     shape,
+    sequences,
     summary: {
       nodeCount: shape.nodes.length,
       objectCount: shape.objects.length,
@@ -341,8 +432,10 @@ export function collectModel(projectName: string): ExportModel {
       meshCount: Mesh.all.length,
       vertexCount: totalVertexCount,
       indexCount: totalIndexCount,
-      triangleCount: totalIndexCount / 3,
-      materialCount: materialNames.size
+      triangleCount: totalIndexCount / 3, // Idk why I find this so funny
+      materialCount: materialNames.size,
+      sequenceCount: sequences.length,
+      animationTrackCount
     }
   };
 }

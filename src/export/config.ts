@@ -18,6 +18,7 @@ export type DtsMaterialOverride = {
 export type ExportConfig = {
   mode: ExportMode;
   orientation: ExportOrientation;
+  scale: number;
   materialFlags: DtsMaterialExportFlags;
   materialOverrides: Record<string, DtsMaterialOverride>;
 };
@@ -25,6 +26,7 @@ export type ExportConfig = {
 export const DEFAULT_EXPORT_CONFIG: ExportConfig = {
   mode: 'blockland_colors',
   orientation: 'blockland_swap_yz_flip_xz',
+  scale: 1 / 16,
   materialFlags: {
     sWrap: true,
     tWrap: true,

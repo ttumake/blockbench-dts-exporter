@@ -1,4 +1,4 @@
-import type { ExportMesh, ExportModel, ExportNode, ExportObject, Vec3 } from '../dts/mesh';
+import type { ExportMesh, ExportModel, ExportNode, ExportObject, ExportSequence, ExportSequenceTrack, Vec3 } from '../dts/mesh';
 import type { ExportOrientation } from '../export/config';
 
 /**
@@ -19,6 +19,10 @@ export function transformVec3(vec: Vec3, orientation: ExportOrientation): Vec3 {
     default:
       return [...vec];
   }
+}
+
+export function scaleVec3(vec: Vec3, scale: number): Vec3 {
+  return [vec[0] * scale, vec[1] * scale, vec[2] * scale];
 }
 
 function triangulateFaceIndices(vertexStart: number, vertexCount: number): number[] {
@@ -94,6 +98,24 @@ function transformNode(node: ExportNode, orientation: ExportOrientation): Export
   };
 }
 
+function transformSequenceTrack(track: ExportSequenceTrack, orientation: ExportOrientation): ExportSequenceTrack {
+  if (track.channel !== 'position') {
+    return track;
+  }
+
+  return {
+    ...track,
+    keyframeValues: track.keyframeValues.map((value) => transformVec3(value, orientation))
+  };
+}
+
+function transformSequence(sequence: ExportSequence, orientation: ExportOrientation): ExportSequence {
+  return {
+    ...sequence,
+    tracks: sequence.tracks.map((track) => transformSequenceTrack(track, orientation))
+  };
+}
+
 export function transformModelOrientation(model: ExportModel, orientation: ExportOrientation): ExportModel {
   if (orientation === 'none') {
     return model;
@@ -109,7 +131,73 @@ export function transformModelOrientation(model: ExportModel, orientation: Expor
       nodes: model.shape.nodes.map((node) => transformNode(node, orientation)),
       objects,
       bounds: computeBounds(allVertices)
+    },
+    sequences: model.sequences.map((sequence) => transformSequence(sequence, orientation))
+  };
+}
+
+function scaleObject(object: ExportObject, scale: number): ExportObject {
+  const vertices = object.mesh.vertices.map((vertex) => scaleVec3(vertex, scale));
+
+  return {
+    ...object,
+    localTransform: {
+      ...object.localTransform,
+      origin: scaleVec3(object.localTransform.origin, scale)
+    },
+    worldBounds: computeBounds(vertices),
+    mesh: {
+      ...object.mesh,
+      vertices
     }
+  };
+}
+
+function scaleNode(node: ExportNode, scale: number): ExportNode {
+  return {
+    ...node,
+    localTransform: {
+      ...node.localTransform,
+      origin: scaleVec3(node.localTransform.origin, scale)
+    }
+  };
+}
+
+function scaleSequenceTrack(track: ExportSequenceTrack, scale: number): ExportSequenceTrack {
+  if (track.channel !== 'position') {
+    return track;
+  }
+
+  return {
+    ...track,
+    keyframeValues: track.keyframeValues.map((value) => scaleVec3(value, scale))
+  };
+}
+
+function scaleSequence(sequence: ExportSequence, scale: number): ExportSequence {
+  return {
+    ...sequence,
+    tracks: sequence.tracks.map((track) => scaleSequenceTrack(track, scale))
+  };
+}
+
+export function transformModelScale(model: ExportModel, scale: number): ExportModel {
+  if (scale === 1) {
+    return model;
+  }
+
+  const objects = model.shape.objects.map((object) => scaleObject(object, scale));
+  const allVertices = objects.flatMap((object) => object.mesh.vertices);
+
+  return {
+    ...model,
+    shape: {
+      ...model.shape,
+      nodes: model.shape.nodes.map((node) => scaleNode(node, scale)),
+      objects,
+      bounds: computeBounds(allVertices)
+    },
+    sequences: model.sequences.map((sequence) => scaleSequence(sequence, scale))
   };
 }
 

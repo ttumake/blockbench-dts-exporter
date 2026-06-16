@@ -1,6 +1,6 @@
 import { collectModel } from '../blockbench/collect-model';
 import { writeDts } from '../dts/writer';
-import { transformModelOrientation } from '../util/geometry';
+import { transformModelOrientation, transformModelScale } from '../util/geometry';
 import type { ExportTextureAsset } from '../util/materials';
 import { createAtlasTextureExport, transformModelToBlocklandColors } from '../util/materials';
 import type { ExportConfig } from './config';
@@ -27,7 +27,10 @@ function normalizeMaterialOverrides(
 }
 
 export function buildExportPackage(projectName: string, config: ExportConfig): BuiltExportPackage {
-  const collectedModel = transformModelOrientation(collectModel(projectName), config.orientation);
+  const collectedModel = transformModelScale(
+    transformModelOrientation(collectModel(projectName), config.orientation),
+    config.scale
+  );
   const transformed =
     config.mode === 'blockland_colors'
       ? transformModelToBlocklandColors(collectedModel)
