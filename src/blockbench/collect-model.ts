@@ -25,10 +25,23 @@ type CubeFaceKey = 'north' | 'east' | 'south' | 'west' | 'up' | 'down';
 const FACE_KEYS: CubeFaceKey[] = ['north', 'east', 'south', 'west', 'up', 'down'];
 const ROOT_NODE_ID = '__root__';
 
+function isHelperNode(node: OutlinerNode): node is Locator | NullObject {
+  return node instanceof Locator || node instanceof NullObject;
+}
+
 function getNodeLocalTransform(node: Group): ExportNode['localTransform'] {
   return {
     origin: toVec3(node.origin),
     rotation: toVec3(node.rotation)
+  };
+}
+
+function getHelperLocalTransform(node: Locator | NullObject): ExportNode['localTransform'] {
+  const runtimeNode = node as any;
+
+  return {
+    origin: toVec3(runtimeNode.origin ?? [0, 0, 0]),
+    rotation: Array.isArray(runtimeNode.rotation) ? toVec3(runtimeNode.rotation) : [0, 0, 0]
   };
 }
 
@@ -193,6 +206,25 @@ function appendExportObject(
   objectIds.push(object.id);
 }
 
+function appendHelperNode(
+  sourceNode: Locator | NullObject,
+  parentId: string,
+  nodes: ExportNode[],
+  childNodeIds: string[]
+): void {
+  const exportNode: ExportNode = {
+    id: sourceNode.uuid,
+    name: sourceNode.name,
+    parentId,
+    childNodeIds: [],
+    objectIds: [],
+    localTransform: getHelperLocalTransform(sourceNode)
+  };
+
+  nodes.push(exportNode);
+  childNodeIds.push(exportNode.id);
+}
+
 function collectNodeRecursive(
   sourceNode: Group,
   parentId: string,
@@ -212,8 +244,13 @@ function collectNodeRecursive(
 
   for (const child of sourceNode.children) {
     if (child instanceof Group) {
-      exportNode.childNodeIds.push(child.uuid);
       collectNodeRecursive(child, sourceNode.uuid, nodes, objects);
+      exportNode.childNodeIds.push(child.uuid);
+      continue;
+    }
+
+    if (isHelperNode(child)) {
+      appendHelperNode(child, sourceNode.uuid, nodes, exportNode.childNodeIds);
       continue;
     }
 
@@ -230,6 +267,16 @@ function collectRootLevelElements(rootNode: ExportNode, objects: ExportObject[])
     }
 
     appendExportObject(node, ROOT_NODE_ID, objects, rootNode.objectIds);
+  }
+}
+
+function collectRootLevelHelperNodes(rootNode: ExportNode, nodes: ExportNode[]): void {
+  for (const node of Outliner.root) {
+    if (!isHelperNode(node)) {
+      continue;
+    }
+
+    appendHelperNode(node, ROOT_NODE_ID, nodes, rootNode.childNodeIds);
   }
 }
 
@@ -257,6 +304,7 @@ function buildShape(): ExportShape {
     }
   }
 
+  collectRootLevelHelperNodes(rootNode, nodes);
   collectRootLevelElements(rootNode, objects);
 
   const names = Array.from(

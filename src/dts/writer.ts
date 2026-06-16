@@ -1,5 +1,5 @@
 import { DtsBufferWriter } from './buffers';
-import type { ExportMesh, ExportModel, ExportObject, Vec3 } from './mesh';
+import type { ExportMesh, ExportModel, ExportNode as ShapeNode, ExportObject, Vec3 } from './mesh';
 import type { ExportConfig } from '../export/config';
 import { computeBounds, computeCenter } from '../util/geometry';
 
@@ -284,6 +284,11 @@ function writeDetailLevel(writer: DtsBufferWriter, detail: DtsDetailLevel): void
   writer.writeInt32(detail.polyCount);
 }
 
+function writeNodeTransform(writer: DtsBufferWriter, node: ShapeNode): void {
+  writer.writeQuat16Identity();
+  writer.writePoint3F(node.localTransform.origin);
+}
+
 function writeMesh(writer: DtsBufferWriter, mesh: DtsMesh): void {
   writer.writeInt32(mesh.type);
   writer.writeGuard();
@@ -406,18 +411,15 @@ export function writeDts(model: ExportModel, config: ExportConfig): ArrayBuffer 
   if (sourceObjects.length === 0) {
     throw new Error('DTS export requires at least one mesh object.');
   }
+  const sourceNodes = model.shape.nodes;
 
   const materials = buildMaterialTable(sourceObjects, config);
   const materialIndexLookup = new Map<string, number>();
   materials.forEach((material, index) => materialIndexLookup.set(material.name, index));
 
   const detailName = 'detail32';
-  const rootNodeName = 'SceneRoot';
-  const names = [detailName, rootNodeName];
-  const nameIndexLookup = new Map<string, number>([
-    [detailName, 0],
-    [rootNodeName, 1]
-  ]);
+  const names = [detailName];
+  const nameIndexLookup = new Map<string, number>([[detailName, 0]]);
 
   const nameIndexFor = (value: string): number => {
     const existing = nameIndexLookup.get(value);
@@ -431,17 +433,21 @@ export function writeDts(model: ExportModel, config: ExportConfig): ArrayBuffer 
     return nextIndex;
   };
 
+  const nodeIndexLookup = new Map<string, number>();
+  sourceNodes.forEach((node, index) => nodeIndexLookup.set(node.id, index));
+
   const objects: DtsObject[] = [];
   const meshes: DtsMesh[] = [];
 
   for (const sourceObject of sourceObjects) {
     const mesh = rewriteMaterialIndices(sourceObject.mesh, materialIndexLookup);
+    const nodeIndex = nodeIndexLookup.get(sourceObject.parentNodeId) ?? 0;
 
     objects.push({
       nameIndex: nameIndexFor(sourceObject.name),
       numMeshes: 1,
       firstMesh: meshes.length,
-      nodeIndex: 0,
+      nodeIndex,
       nextSibling: -1,
       firstDecal: -1
     });
@@ -453,24 +459,57 @@ export function writeDts(model: ExportModel, config: ExportConfig): ArrayBuffer 
     nameIndexFor(material.name);
   }
 
+  const objectIndexLookup = new Map<string, number>();
+  sourceObjects.forEach((object, index) => objectIndexLookup.set(object.id, index));
+
+  const nodes: DtsNode[] = sourceNodes.map((node) => {
+    const childIndices = node.childNodeIds
+      .map((childId) => nodeIndexLookup.get(childId))
+      .filter((value): value is number => value !== undefined);
+    const objectIndices = node.objectIds
+      .map((objectId) => objectIndexLookup.get(objectId))
+      .filter((value): value is number => value !== undefined);
+
+    return {
+      nameIndex: nameIndexFor(node.name),
+      parentIndex: node.parentId ? (nodeIndexLookup.get(node.parentId) ?? -1) : -1,
+      firstObject: objectIndices[0] ?? -1,
+      firstChild: childIndices[0] ?? -1,
+      nextSibling: -1
+    };
+  });
+
+  sourceNodes.forEach((node) => {
+    const childIndices = node.childNodeIds
+      .map((childId) => nodeIndexLookup.get(childId))
+      .filter((value): value is number => value !== undefined);
+
+    for (let index = 0; index < childIndices.length; index += 1) {
+      const currentIndex = childIndices[index];
+      nodes[currentIndex].nextSibling = childIndices[index + 1] ?? -1;
+    }
+
+    const objectIndices = node.objectIds
+      .map((objectId) => objectIndexLookup.get(objectId))
+      .filter((value): value is number => value !== undefined);
+
+    for (let index = 0; index < objectIndices.length; index += 1) {
+      const currentIndex = objectIndices[index];
+      objects[currentIndex].nextSibling = objectIndices[index + 1] ?? -1;
+    }
+  });
+
   const allVertices = sourceObjects.flatMap((object) => object.mesh.vertices);
   const shapeBounds = computeBounds(allVertices);
   const shapeCenter = computeCenter(shapeBounds.min, shapeBounds.max);
   const shapeRadius = computeRadius(allVertices, shapeCenter);
   const shapeTubeRadius = computeTubeRadius(allVertices, shapeCenter);
   const totalTriangles = sourceObjects.reduce((sum, object) => sum + object.mesh.indices.length / 3, 0);
-  const node: DtsNode = {
-    nameIndex: nameIndexFor(rootNodeName),
-    parentIndex: -1,
-    firstObject: -1,
-    firstChild: -1,
-    nextSibling: -1
-  };
   const subshape: DtsSubshape = {
     firstNode: 0,
     firstObject: 0,
     firstDecal: 0,
-    numNodes: 1,
+    numNodes: nodes.length,
     numObjects: objects.length,
     numDecals: 0
   };
@@ -491,7 +530,7 @@ export function writeDts(model: ExportModel, config: ExportConfig): ArrayBuffer 
 
   const writer = new DtsBufferWriter();
 
-  writer.writeInt32(1);
+  writer.writeInt32(nodes.length);
   writer.writeInt32(objects.length);
   writer.writeInt32(0);
   writer.writeInt32(1);
@@ -505,7 +544,7 @@ export function writeDts(model: ExportModel, config: ExportConfig): ArrayBuffer 
   writer.writeInt32(objectStates.length);
   writer.writeInt32(0);
   writer.writeInt32(0);
-  writer.writeInt32(1);
+  writer.writeInt32(nodes.length);
   writer.writeInt32(meshes.length);
   writer.writeInt32(names.length);
   writer.writeFloat32(detail.size);
@@ -519,7 +558,9 @@ export function writeDts(model: ExportModel, config: ExportConfig): ArrayBuffer 
   writer.writePoint3F(shapeBounds.max);
   writer.writeGuard();
 
-  writeNode(writer, node);
+  for (const node of nodes) {
+    writeNode(writer, node);
+  }
   writer.writeGuard();
 
   for (const object of objects) {
@@ -539,8 +580,9 @@ export function writeDts(model: ExportModel, config: ExportConfig): ArrayBuffer 
   writer.writeInt32(subshape.numDecals);
   writer.writeGuard();
 
-  writer.writeQuat16Identity();
-  writer.writePoint3F([0, 0, 0]);
+  for (const node of sourceNodes) {
+    writeNodeTransform(writer, node);
+  }
   writer.writeGuard();
 
   writer.writeGuard();
