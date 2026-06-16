@@ -1,4 +1,4 @@
-import type { Vec3 } from './mesh';
+import type { Vec3 } from '../model/types';
 
 export const DTS_VERSION = 24;
 export const DTS_EXPORTER_VERSION = 0;

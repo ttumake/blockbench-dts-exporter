@@ -1,5 +1,5 @@
 type FaceTextureRef = string | false | Texture | undefined;
-import type { ExportFace, ExportMesh, ExportModel, ExportObject, Vec2 } from '../dts/mesh';
+import type { ExportFace, ExportMesh, ExportModel, ExportObject, Vec2 } from '../model/types';
 
 export type ExportTextureAsset = {
   materialName: string;

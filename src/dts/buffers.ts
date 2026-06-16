@@ -1,4 +1,4 @@
-import type { Vec2, Vec3 } from './mesh';
+import type { Vec2, Vec3 } from '../model/types';
 
 type FinalizedBuffers = {
   buffer32: Uint8Array;

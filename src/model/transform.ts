@@ -1,12 +1,14 @@
-import type { ExportMesh, ExportModel, ExportNode, ExportObject, ExportSequence, ExportSequenceTrack, Vec3 } from '../dts/mesh';
+import type {
+  ExportMesh,
+  ExportModel,
+  ExportNode,
+  ExportObject,
+  ExportSequence,
+  ExportSequenceTrack,
+  Vec3
+} from './types';
 import type { ExportOrientation } from '../export/config';
 
-/**
- * Defines a type for a 3D vector represented as an array of three numbers (x, y, z).
- * 
- * @param vector
- * @returns A Vec3 object containing the x, y, and z components of the input vector.
- */
 export function toVec3(vector: ArrayVector3): Vec3 {
   return [vector[0], vector[1], vector[2]];
 }
@@ -35,7 +37,7 @@ function triangulateFaceIndices(vertexStart: number, vertexCount: number): numbe
   return indices;
 }
 
-function orientationFlipsWinding(orientation: ExportOrientation): boolean {
+function orientationFlipsWinding(_orientation: ExportOrientation): boolean {
   return false;
 }
 
@@ -201,11 +203,6 @@ export function transformModelScale(model: ExportModel, scale: number): ExportMo
   };
 }
 
-/**
- * Creates an empty mesh with no vertices, uvs, indices, material names, or faces.
- * 
- * @returns An empty ExportMesh object.
- */
 export function createEmptyMesh(): ExportMesh {
   return {
     vertices: [],
@@ -216,13 +213,6 @@ export function createEmptyMesh(): ExportMesh {
   };
 }
 
-/**
- * Computes the axis-aligned bounding box (AABB) for a given array of vertices. 
- * The AABB is defined by its minimum and maximum corners, which are returned as Vec3 objects.
- * 
- * @param vertices 
- * @returns An object containing the minimum and maximum corners of the bounding box, each represented as a Vec3.
- */
 export function computeBounds(vertices: Vec3[]): { min: Vec3; max: Vec3 } {
   if (vertices.length === 0) {
     return {

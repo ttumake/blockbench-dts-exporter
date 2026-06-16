@@ -1,6 +1,6 @@
 import type { ExportConfig } from '../export/config';
 import { DtsBufferWriter } from './buffers';
-import type { ExportMesh, ExportModel, ExportObject } from './mesh';
+import type { ExportMesh, ExportModel, ExportObject } from '../model/types';
 import {
   DTS_EXPORTER_VERSION,
   DTS_MATERIAL_MIP_MAP_ZERO_BORDER,

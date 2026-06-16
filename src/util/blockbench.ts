@@ -1,5 +1,5 @@
-import type { Vec2, Vec3 } from '../dts/mesh';
-import { toVec3 } from './geometry';
+import type { Vec2, Vec3 } from '../model/types';
+import { toVec3 } from '../model/transform';
 import { getMaterialNameFromTextureReference, getTextureByReference } from './materials';
 
 type FaceTextureRef = string | false | Texture | undefined;

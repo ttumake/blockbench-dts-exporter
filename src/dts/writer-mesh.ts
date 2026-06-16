@@ -1,6 +1,6 @@
-import { computeBounds, computeCenter } from '../util/geometry';
+import { computeBounds, computeCenter } from '../model/transform';
 import { DtsBufferWriter } from './buffers';
-import type { ExportMesh, Vec3 } from './mesh';
+import type { ExportMesh, Vec3 } from '../model/types';
 import {
   DTS_MESH_TYPE_STANDARD,
   DTS_PRIMITIVE_INDEXED,

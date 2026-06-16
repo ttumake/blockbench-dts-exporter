@@ -1,6 +1,6 @@
 import { collectModel } from '../blockbench/collect-model';
 import { writeDts } from '../dts/writer';
-import { transformModelOrientation, transformModelScale } from '../util/geometry';
+import { transformModelOrientation, transformModelScale } from '../model/transform';
 import type { ExportTextureAsset } from '../util/materials';
 import { createAtlasTextureExport, transformModelToBlocklandColors } from '../util/materials';
 import type { ExportConfig } from './config';

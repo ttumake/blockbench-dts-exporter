@@ -9,7 +9,7 @@ import type {
   ExportShape,
   Vec2,
   Vec3
-} from '../dts/mesh';
+} from '../model/types';
 import {
   getCubeFaceUv,
   getCubeWorldVertices,
@@ -20,7 +20,7 @@ import {
   isExportableCubeFace,
   isExportableMeshFace
 } from '../util/blockbench';
-import { computeBounds, createEmptyMesh, toVec3 } from '../util/geometry';
+import { computeBounds, createEmptyMesh, toVec3 } from '../model/transform';
 
 type CubeFaceKey = 'north' | 'east' | 'south' | 'west' | 'up' | 'down';
 

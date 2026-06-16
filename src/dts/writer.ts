@@ -1,7 +1,7 @@
 import { DtsBufferWriter } from './buffers';
-import type { ExportModel } from './mesh';
+import type { ExportModel } from '../model/types';
 import type { ExportConfig } from '../export/config';
-import { computeBounds, computeCenter } from '../util/geometry';
+import { computeBounds, computeCenter } from '../model/transform';
 import { computeRadius, computeTubeRadius, toDtsMesh, writeMesh } from './writer-mesh';
 import {
   buildMaterialTable,
