@@ -3,6 +3,7 @@ import type { Vec3 } from '../model/types';
 export const DTS_VERSION = 24;
 export const DTS_EXPORTER_VERSION = 0;
 export const DTS_MESH_TYPE_STANDARD = 0;
+export const DTS_MESH_TYPE_NULL = 4;
 export const DTS_PRIMITIVE_INDEXED = 0x20000000;
 export const DTS_MATERIAL_S_WRAP = 0x00000001;
 export const DTS_MATERIAL_T_WRAP = 0x00000002;
@@ -51,6 +52,11 @@ export type DtsObjectState = {
   vis: number;
   frame: number;
   matFrame: number;
+};
+
+export type DtsTrigger = {
+  state: number;
+  pos: number;
 };
 
 export type DtsPrimitive = {

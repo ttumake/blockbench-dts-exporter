@@ -2,6 +2,7 @@ import { computeBounds, computeCenter } from '../model/transform';
 import { DtsBufferWriter } from './buffers';
 import type { ExportMesh, Vec3 } from '../model/types';
 import {
+  DTS_MESH_TYPE_NULL,
   DTS_MESH_TYPE_STANDARD,
   DTS_PRIMITIVE_INDEXED,
   type DtsMesh,
@@ -107,8 +108,36 @@ export function toDtsMesh(mesh: ExportMesh): DtsMesh {
   };
 }
 
+export function createNullMesh(): DtsMesh {
+  return {
+    bounds: {
+      min: [0, 0, 0],
+      max: [0, 0, 0]
+    },
+    center: [0, 0, 0],
+    radius: 0,
+    numFrames: 0,
+    numMatFrames: 0,
+    parent: -1,
+    type: DTS_MESH_TYPE_NULL,
+    verts: [],
+    tverts: [],
+    normals: [],
+    enormals: [],
+    primitives: [],
+    indices: [],
+    mindices: [],
+    vertsPerFrame: 0,
+    flags: DTS_MESH_TYPE_NULL
+  };
+}
+
 export function writeMesh(writer: DtsBufferWriter, mesh: DtsMesh): void {
   writer.writeInt32(mesh.type);
+  if (mesh.type === DTS_MESH_TYPE_NULL) {
+    return;
+  }
+
   writer.writeGuard();
   writer.writeInt32(mesh.numFrames);
   writer.writeInt32(mesh.numMatFrames);

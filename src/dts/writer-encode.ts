@@ -15,7 +15,8 @@ import {
   type DtsMaterial,
   type DtsNode,
   type DtsObject,
-  type DtsObjectState
+  type DtsObjectState,
+  type DtsTrigger
 } from './writer-types';
 
 function encodeAsciiBytes(value: string): number[] {
@@ -98,6 +99,11 @@ export function writeObjectState(writer: DtsBufferWriter, state: DtsObjectState)
   writer.writeFloat32(state.vis);
   writer.writeInt32(state.frame);
   writer.writeInt32(state.matFrame);
+}
+
+export function writeTrigger(writer: DtsBufferWriter, trigger: DtsTrigger): void {
+  writer.writeInt32(trigger.state);
+  writer.writeFloat32(trigger.pos);
 }
 
 export function writeDetailLevel(writer: DtsBufferWriter, detail: DtsDetailLevel): void {

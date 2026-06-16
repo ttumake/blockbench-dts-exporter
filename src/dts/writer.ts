@@ -2,7 +2,8 @@ import { DtsBufferWriter } from './buffers';
 import type { ExportModel } from '../model/types';
 import type { ExportConfig } from '../export/config';
 import { computeBounds, computeCenter } from '../model/transform';
-import { computeRadius, computeTubeRadius, toDtsMesh, writeMesh } from './writer-mesh';
+import { computeRadius, computeTubeRadius, createNullMesh, toDtsMesh, writeMesh } from './writer-mesh';
+import { buildLodPlan } from './writer-lod';
 import {
   buildMaterialTable,
   encodeHeader,
@@ -12,7 +13,8 @@ import {
   writeDetailLevel,
   writeNode,
   writeObject,
-  writeObjectState
+  writeObjectState,
+  writeTrigger
 } from './writer-encode';
 import type {
   DtsDetailLevel,
@@ -21,10 +23,13 @@ import type {
   DtsObject,
   DtsObjectState,
   DtsSequence,
-  DtsSubshape
+  DtsSubshape,
+  DtsTrigger
 } from './writer-types';
 
 const DTS_SEQUENCE_FLAG_ALIGNED_SCALE = 1 << 1;
+const DTS_SEQUENCE_FLAG_CYCLIC = 1 << 4;
+const DTS_TRIGGER_STATE_ON = 1 << 31;
 
 function subtractVec3(a: [number, number, number], b: [number, number, number]): [number, number, number] {
   return [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
@@ -166,19 +171,23 @@ function interpolateTrackValue(
 }
 
 export function writeDts(model: ExportModel, config: ExportConfig): ArrayBuffer {
-  const sourceObjects = model.shape.objects.filter((object) => object.mesh.vertices.length > 0);
+  const lodPlan = buildLodPlan(model);
+  const renderModel = lodPlan.renderModel;
+  const sourceObjects = lodPlan.renderObjects;
   if (sourceObjects.length === 0) {
     throw new Error('DTS export requires at least one mesh object.');
   }
-  const sourceNodes = synthesizeBlocklandNodes(model, sourceObjects);
+  const sourceNodes = synthesizeBlocklandNodes(renderModel, sourceObjects);
 
-  const materials = buildMaterialTable(sourceObjects, config);
+  const materials = buildMaterialTable(lodPlan.materialObjects, config);
   const materialIndexLookup = new Map<string, number>();
   materials.forEach((material, index) => materialIndexLookup.set(material.name, index));
+  const names = Array.from(new Set(lodPlan.detailLevels.map((detailLevel) => detailLevel.name)));
 
-  const detailName = 'detail32';
-  const names = [detailName];
-  const nameIndexLookup = new Map<string, number>([[detailName, 0]]);
+  if (names.length === 0) {
+    names.push('detail32');
+  }
+  const nameIndexLookup = new Map<string, number>(names.map((name, index) => [name, index]));
 
   const nameIndexFor = (value: string): number => {
     const existing = nameIndexLookup.get(value);
@@ -205,26 +214,62 @@ export function writeDts(model: ExportModel, config: ExportConfig): ArrayBuffer 
 
   const objects: DtsObject[] = [];
   const meshes: DtsMesh[] = [];
+  const objectStates: DtsObjectState[] = [];
+  const detailLevels: DtsDetailLevel[] = [];
+  const nodeAlignedScales: [number, number, number][] = [];
+  const triggers: DtsTrigger[] = [];
+  const detailTriangleCounts = lodPlan.detailLevels.map((detailLevel) => {
+    let total = 0;
+    for (const object of detailLevel.variantsByBaseName.values()) {
+      total += object.mesh.indices.length / 3;
+    }
+    return total;
+  });
+  const normalizeObjectName = (name: string): string => {
+    const hashIndex = name.indexOf('#');
+    return hashIndex === -1 ? name : name.slice(0, hashIndex);
+  };
 
   for (const sourceObject of sourceObjects) {
-    const mesh = rewriteMaterialIndices(sourceObject.mesh, materialIndexLookup);
+    const normalizedObjectName = normalizeObjectName(sourceObject.name);
     const assignedNodeId = objectToNodeId.get(sourceObject.id) ?? '__render__';
     const assignedNode = sourceNodeById.get(assignedNodeId);
     const nodeIndex = nodeIndexLookup.get(assignedNodeId) ?? 0;
+    const variantObjects = lodPlan.detailLevels.map((detailLevel) => (
+      detailLevel.variantsByBaseName.get(normalizedObjectName) ?? null
+    ));
+    const lastPresentMeshIndex = variantObjects.reduce((lastIndex, variantObject, detailIndex) => (
+      variantObject ? detailIndex : lastIndex
+    ), -1);
+    const firstMesh = meshes.length;
+
+    for (let detailIndex = 0; detailIndex <= lastPresentMeshIndex; detailIndex += 1) {
+      const variantObject = variantObjects[detailIndex];
+      if (!variantObject) {
+        meshes.push(createNullMesh());
+        continue;
+      }
+
+      const variantMesh = rewriteMaterialIndices(variantObject.mesh, materialIndexLookup);
+      meshes.push(remapObjectMeshToNodeOrigin(
+        toDtsMesh(variantMesh),
+        assignedNode?.localTransform.origin ?? [0, 0, 0]
+      ));
+    }
 
     objects.push({
-      nameIndex: nameIndexFor(sourceObject.name),
-      numMeshes: 1,
-      firstMesh: meshes.length,
+      nameIndex: nameIndexFor(normalizedObjectName),
+      numMeshes: Math.max(lastPresentMeshIndex + 1, 0),
+      firstMesh,
       nodeIndex,
       nextSibling: -1,
       firstDecal: -1
     });
-
-    meshes.push(remapObjectMeshToNodeOrigin(
-      toDtsMesh(mesh),
-      assignedNode?.localTransform.origin ?? [0, 0, 0]
-    ));
+    objectStates.push({
+      vis: 1,
+      frame: 0,
+      matFrame: 0
+    });
   }
 
   for (const material of materials) {
@@ -278,7 +323,6 @@ export function writeDts(model: ExportModel, config: ExportConfig): ArrayBuffer 
   const shapeCenter = computeCenter(shapeBounds.min, shapeBounds.max);
   const shapeRadius = computeRadius(allVertices, shapeCenter);
   const shapeTubeRadius = computeTubeRadius(allVertices, shapeCenter);
-  const totalTriangles = sourceObjects.reduce((sum, object) => sum + object.mesh.indices.length / 3, 0);
   const subshape: DtsSubshape = {
     firstNode: 0,
     firstObject: 0,
@@ -287,25 +331,22 @@ export function writeDts(model: ExportModel, config: ExportConfig): ArrayBuffer 
     numObjects: objects.length,
     numDecals: 0
   };
-  const detail: DtsDetailLevel = {
-    nameIndex: nameIndexFor(detailName),
-    subshape: 0,
-    objectDetail: 0,
-    size: 32,
-    avgError: -1,
-    maxError: -1,
-    polyCount: totalTriangles
-  };
-  const objectStates: DtsObjectState[] = objects.map(() => ({
-    vis: 1,
-    frame: 0,
-    matFrame: 0
-  }));
+  for (const [index, detailLevel] of lodPlan.detailLevels.entries()) {
+    detailLevels.push({
+      nameIndex: nameIndexFor(detailLevel.name),
+      subshape: 0,
+      objectDetail: index,
+      size: detailLevel.size,
+      avgError: -1,
+      maxError: -1,
+      polyCount: detailTriangleCounts[index]
+    });
+  }
   const nodeTranslations: [number, number, number][] = [];
   const nodeRotations: [number, number, number, number][] = [];
   const sequences: DtsSequence[] = [];
 
-  for (const sequence of model.sequences) {
+  for (const sequence of renderModel.sequences) {
     const sampleTimes = Array.from(
       new Set(sequence.tracks.flatMap((track) => track.keyframeTimes))
     ).sort((a, b) => a - b);
@@ -315,15 +356,24 @@ export function writeDts(model: ExportModel, config: ExportConfig): ArrayBuffer 
 
     const rotationMatters = sourceNodes.map(() => false);
     const translationMatters = sourceNodes.map(() => false);
+    const scaleMatters = sourceNodes.map(() => false);
     const baseRotation = nodeRotations.length;
     const baseTranslation = nodeTranslations.length;
+    const baseScale = nodeAlignedScales.length;
+    const firstTrigger = triggers.length;
+    const orderedTracks = sequence.tracks
+      .map((track) => {
+        const sourceNode = sourceNodeByName.get(track.targetName);
+        return {
+          track,
+          sourceNode,
+          nodeIndex: sourceNode ? (nodeIndexLookup.get(sourceNode.id) ?? -1) : -1
+        };
+      })
+      .filter((entry) => entry.nodeIndex !== -1)
+      .sort((a, b) => a.nodeIndex - b.nodeIndex || a.track.channel.localeCompare(b.track.channel));
 
-    for (const track of sequence.tracks) {
-      const sourceNode = sourceNodeByName.get(track.targetName);
-      const nodeIndex = sourceNode ? (nodeIndexLookup.get(sourceNode.id) ?? -1) : -1;
-      if (nodeIndex === -1) {
-        continue;
-      }
+    for (const { track, sourceNode, nodeIndex } of orderedTracks) {
 
       if (track.channel === 'rotation') {
         rotationMatters[nodeIndex] = true;
@@ -341,12 +391,27 @@ export function writeDts(model: ExportModel, config: ExportConfig): ArrayBuffer 
             value[2] + (sourceNode?.localTransform.origin[2] ?? 0)
           ]);
         }
+      } else if (track.channel === 'scale') {
+        scaleMatters[nodeIndex] = true;
+        for (const sampleTime of sampleTimes) {
+          nodeAlignedScales.push(interpolateTrackValue(track.keyframeTimes, track.keyframeValues, sampleTime));
+        }
       }
+    }
+
+    const duration = sequence.length > 0 ? sequence.length : sampleTimes[sampleTimes.length - 1];
+    const sortedMarkers = sequence.markers.slice().sort((a, b) => a.time - b.time);
+
+    for (const marker of sortedMarkers) {
+      triggers.push({
+        state: DTS_TRIGGER_STATE_ON,
+        pos: duration > 0 ? marker.time / duration : 0
+      });
     }
 
     sequences.push({
       nameIndex: nameIndexFor(sequence.name),
-      flags: DTS_SEQUENCE_FLAG_ALIGNED_SCALE,
+      flags: DTS_SEQUENCE_FLAG_ALIGNED_SCALE | (sequence.loop === 'loop' ? DTS_SEQUENCE_FLAG_CYCLIC : 0),
       numKeyframes: sampleTimes.length,
       duration: sequence.length,
       priority: 1,
@@ -354,15 +419,15 @@ export function writeDts(model: ExportModel, config: ExportConfig): ArrayBuffer 
       numGroundFrames: 0,
       baseRotation,
       baseTranslation,
-      baseScale: 0,
+      baseScale,
       baseObjectState: objectStates.length,
       baseDecalState: 0,
-      firstTrigger: 0,
-      numTriggers: 0,
+      firstTrigger,
+      numTriggers: sortedMarkers.length,
       toolBegin: sampleTimes[0],
       rotationMatters,
       translationMatters,
-      scaleMatters: sourceNodes.map(() => false),
+      scaleMatters,
       decalMatters: sourceNodes.map(() => false),
       iflMatters: sourceNodes.map(() => false),
       visMatters: sourceNodes.map(() => false),
@@ -381,17 +446,17 @@ export function writeDts(model: ExportModel, config: ExportConfig): ArrayBuffer 
   writer.writeInt32(nodeRotations.length);
   writer.writeInt32(nodeTranslations.length);
   writer.writeInt32(0);
-  writer.writeInt32(0);
+  writer.writeInt32(nodeAlignedScales.length);
   writer.writeInt32(0);
   writer.writeInt32(0);
   writer.writeInt32(objectStates.length);
   writer.writeInt32(0);
-  writer.writeInt32(0);
-  writer.writeInt32(1);
+  writer.writeInt32(triggers.length);
+  writer.writeInt32(detailLevels.length);
   writer.writeInt32(meshes.length);
   writer.writeInt32(names.length);
-  writer.writeFloat32(detail.size);
-  writer.writeInt32(0);
+  writer.writeFloat32(detailLevels[detailLevels.length - 1]?.size ?? 1);
+  writer.writeInt32(Math.max(detailLevels.length - 1, 0));
   writer.writeGuard();
 
   writer.writeFloat32(shapeRadius);
@@ -435,6 +500,9 @@ export function writeDts(model: ExportModel, config: ExportConfig): ArrayBuffer 
   }
   writer.writeGuard();
 
+  for (const scale of nodeAlignedScales) {
+    writer.writePoint3F(scale);
+  }
   writer.writeGuard();
   writer.writeGuard();
 
@@ -443,10 +511,14 @@ export function writeDts(model: ExportModel, config: ExportConfig): ArrayBuffer 
   }
   writer.writeGuard();
 
-  writer.writeGuard();
+  for (const trigger of triggers) {
+    writeTrigger(writer, trigger);
+  }
   writer.writeGuard();
 
-  writeDetailLevel(writer, detail);
+  for (const detail of detailLevels) {
+    writeDetailLevel(writer, detail);
+  }
   writer.writeGuard();
 
   for (const mesh of meshes) {

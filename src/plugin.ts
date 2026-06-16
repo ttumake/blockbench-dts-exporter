@@ -22,7 +22,7 @@ let exportJsonAction: Action;
 BBPlugin.register('dts_exporter', {
   title: 'Torque DTS Exporter',
   author: 'Markus A. Vallin',
-  description: `Exports Blockbench models to Torque DTS format. Snapshot: ${PLUGIN_SNAPSHOT}`,
+  description: `Exports Blockbench models to Torque DTS format. ${PLUGIN_SNAPSHOT}`,
   icon: 'deployed_code',
   version: PLUGIN_VERSION,
   variant: 'desktop',
