@@ -8,9 +8,16 @@ export type ExportTextureAsset = {
 };
 
 type Rgba = [number, number, number, number];
+type ColorMaterialCluster = {
+  materialName: string;
+  baseName: string;
+  representativeColor: Rgba;
+  sampleCount: number;
+};
 
 const TEXTURE_BLEED_PASSES = 4;
 const BLOCKLAND_TEXTURE_SIZE = 16;
+const BLOCKLAND_COLOR_MERGE_DISTANCE_SQ = 24 * 24 * 3;
 
 const NAMED_COLOR_PALETTE: Array<{ name: string; color: Rgba }> = [
   { name: 'white', color: [255, 255, 255, 255] },
@@ -197,6 +204,42 @@ function createSolidTextureDataUrl(color: Rgba): string {
   return canvas.toDataURL('image/png');
 }
 
+function blendColors(a: Rgba, b: Rgba, aWeight: number): Rgba {
+  const totalWeight = aWeight + 1;
+
+  return [
+    clampByte((a[0] * aWeight + b[0]) / totalWeight),
+    clampByte((a[1] * aWeight + b[1]) / totalWeight),
+    clampByte((a[2] * aWeight + b[2]) / totalWeight),
+    clampByte((a[3] * aWeight + b[3]) / totalWeight)
+  ];
+}
+
+function findReusableColorCluster(
+  clusters: ColorMaterialCluster[],
+  baseName: string,
+  color: Rgba
+): ColorMaterialCluster | undefined {
+  let bestCluster: ColorMaterialCluster | undefined;
+  let bestDistance = Number.POSITIVE_INFINITY;
+
+  for (const cluster of clusters) {
+    if (cluster.baseName !== baseName) {
+      continue;
+    }
+
+    const distance = colorDistance(color, cluster.representativeColor);
+    if (distance > BLOCKLAND_COLOR_MERGE_DISTANCE_SQ || distance >= bestDistance) {
+      continue;
+    }
+
+    bestCluster = cluster;
+    bestDistance = distance;
+  }
+
+  return bestCluster;
+}
+
 function getSourceFace(exportFace: ExportFace): CubeFace | MeshFace | undefined {
   if (exportFace.elementType === 'cube') {
     const cube = Cube.all.find((entry) => entry.uuid === exportFace.elementId);
@@ -373,35 +416,44 @@ export function transformModelToBlocklandColors(model: ExportModel): {
 } {
   const transformedObjects = model.shape.objects.map(cloneObject);
   const assets = new Map<string, ExportTextureAsset>();
-  const colorToMaterialName = new Map<string, string>();
   const materialNameCounts = new Map<string, number>();
+  const colorClusters: ColorMaterialCluster[] = [];
 
   for (const object of transformedObjects) {
     for (const exportFace of object.mesh.faces) {
       const sourceFace = getSourceFace(exportFace);
       const sampledColor: Rgba = sourceFace ? sampleSourceFaceColor(sourceFace) : [255, 255, 255, 255];
-      const colorKey = rgbaToHex(sampledColor);
-      let materialName = colorToMaterialName.get(colorKey);
+      const baseName = getBlocklandColorName(sampledColor);
+      let cluster = findReusableColorCluster(colorClusters, baseName, sampledColor);
 
-      if (!materialName) {
-        const baseName = getBlocklandColorName(sampledColor);
+      if (!cluster) {
         const nextCount = (materialNameCounts.get(baseName) ?? 0) + 1;
         materialNameCounts.set(baseName, nextCount);
-        materialName = `${baseName}${nextCount}`;
-        colorToMaterialName.set(colorKey, materialName);
+        cluster = {
+          materialName: `${baseName}${nextCount}`,
+          baseName,
+          representativeColor: [...sampledColor],
+          sampleCount: 1
+        };
+        colorClusters.push(cluster);
+      } else {
+        cluster.representativeColor = blendColors(
+          cluster.representativeColor,
+          sampledColor,
+          cluster.sampleCount
+        );
+        cluster.sampleCount += 1;
       }
 
-      exportFace.materialName = materialName;
+      exportFace.materialName = cluster.materialName;
       remapFaceUvsToFullTexture(object.mesh, exportFace);
 
-      if (!assets.has(materialName)) {
-        const assetColor: Rgba = [...sampledColor];
-        assets.set(materialName, {
-          materialName,
-          fileName: `${materialName}.png`,
-          dataUrl: createSolidTextureDataUrl(assetColor)
-        });
-      }
+      const assetColor: Rgba = [...cluster.representativeColor];
+      assets.set(cluster.materialName, {
+        materialName: cluster.materialName,
+        fileName: `${cluster.materialName}.png`,
+        dataUrl: createSolidTextureDataUrl(assetColor)
+      });
     }
 
     rebuildMaterialTable(object.mesh);

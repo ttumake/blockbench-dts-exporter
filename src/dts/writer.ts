@@ -1,5 +1,5 @@
 import { DtsBufferWriter } from './buffers';
-import type { ExportMesh, ExportModel, ExportNode as ShapeNode, ExportObject, Vec3 } from './mesh';
+import type { ExportMesh, ExportModel, ExportObject, Vec3 } from './mesh';
 import type { ExportConfig } from '../export/config';
 import { computeBounds, computeCenter } from '../util/geometry';
 
@@ -91,6 +91,16 @@ type DtsMesh = {
   mindices: number[];
   vertsPerFrame: number;
   flags: number;
+};
+
+type BlocklandNodeSource = {
+  id: string;
+  name: string;
+  parentId: string | null;
+  objectIds: string[];
+  localTransform: {
+    origin: Vec3;
+  };
 };
 
 function subtract(a: Vec3, b: Vec3): Vec3 {
@@ -284,9 +294,49 @@ function writeDetailLevel(writer: DtsBufferWriter, detail: DtsDetailLevel): void
   writer.writeInt32(detail.polyCount);
 }
 
-function writeNodeTransform(writer: DtsBufferWriter, node: ShapeNode): void {
-  writer.writeQuat16Identity();
-  writer.writePoint3F(node.localTransform.origin);
+function synthesizeBlocklandNodes(model: ExportModel, sourceObjects: ExportObject[]): BlocklandNodeSource[] {
+  const helperNodes = model.shape.nodes.filter(
+    (node) => node.id !== '__root__' && node.objectIds.length === 0
+  );
+
+  const renderNodeId = '__render__';
+  const nodes: BlocklandNodeSource[] = [
+    {
+      id: '__main__',
+      name: 'main',
+      parentId: null,
+      objectIds: [],
+      localTransform: { origin: [0, 0, 0] }
+    },
+    {
+      id: '__start__',
+      name: 'start',
+      parentId: '__main__',
+      objectIds: [],
+      localTransform: { origin: [0, 0, 0] }
+    },
+    {
+      id: renderNodeId,
+      name: 'stock100',
+      parentId: '__start__',
+      objectIds: sourceObjects.map((object) => object.id),
+      localTransform: { origin: [0, 0, 0] }
+    }
+  ];
+
+  for (const helperNode of helperNodes) {
+    nodes.push({
+      id: helperNode.id,
+      name: helperNode.name,
+      parentId: '__start__',
+      objectIds: [],
+      localTransform: {
+        origin: helperNode.localTransform.origin
+      }
+    });
+  }
+
+  return nodes;
 }
 
 function writeMesh(writer: DtsBufferWriter, mesh: DtsMesh): void {
@@ -411,7 +461,7 @@ export function writeDts(model: ExportModel, config: ExportConfig): ArrayBuffer 
   if (sourceObjects.length === 0) {
     throw new Error('DTS export requires at least one mesh object.');
   }
-  const sourceNodes = model.shape.nodes;
+  const sourceNodes = synthesizeBlocklandNodes(model, sourceObjects);
 
   const materials = buildMaterialTable(sourceObjects, config);
   const materialIndexLookup = new Map<string, number>();
@@ -441,7 +491,7 @@ export function writeDts(model: ExportModel, config: ExportConfig): ArrayBuffer 
 
   for (const sourceObject of sourceObjects) {
     const mesh = rewriteMaterialIndices(sourceObject.mesh, materialIndexLookup);
-    const nodeIndex = nodeIndexLookup.get(sourceObject.parentNodeId) ?? 0;
+    const nodeIndex = nodeIndexLookup.get('__render__') ?? 0;
 
     objects.push({
       nameIndex: nameIndexFor(sourceObject.name),
@@ -463,8 +513,9 @@ export function writeDts(model: ExportModel, config: ExportConfig): ArrayBuffer 
   sourceObjects.forEach((object, index) => objectIndexLookup.set(object.id, index));
 
   const nodes: DtsNode[] = sourceNodes.map((node) => {
-    const childIndices = node.childNodeIds
-      .map((childId) => nodeIndexLookup.get(childId))
+    const childIndices = sourceNodes
+      .filter((candidate) => candidate.parentId === node.id)
+      .map((candidate) => nodeIndexLookup.get(candidate.id))
       .filter((value): value is number => value !== undefined);
     const objectIndices = node.objectIds
       .map((objectId) => objectIndexLookup.get(objectId))
@@ -480,8 +531,9 @@ export function writeDts(model: ExportModel, config: ExportConfig): ArrayBuffer 
   });
 
   sourceNodes.forEach((node) => {
-    const childIndices = node.childNodeIds
-      .map((childId) => nodeIndexLookup.get(childId))
+    const childIndices = sourceNodes
+      .filter((candidate) => candidate.parentId === node.id)
+      .map((candidate) => nodeIndexLookup.get(candidate.id))
       .filter((value): value is number => value !== undefined);
 
     for (let index = 0; index < childIndices.length; index += 1) {
@@ -544,7 +596,7 @@ export function writeDts(model: ExportModel, config: ExportConfig): ArrayBuffer 
   writer.writeInt32(objectStates.length);
   writer.writeInt32(0);
   writer.writeInt32(0);
-  writer.writeInt32(nodes.length);
+  writer.writeInt32(1);
   writer.writeInt32(meshes.length);
   writer.writeInt32(names.length);
   writer.writeFloat32(detail.size);
@@ -581,7 +633,8 @@ export function writeDts(model: ExportModel, config: ExportConfig): ArrayBuffer 
   writer.writeGuard();
 
   for (const node of sourceNodes) {
-    writeNodeTransform(writer, node);
+    writer.writeQuat16Identity();
+    writer.writePoint3F(node.localTransform.origin);
   }
   writer.writeGuard();
 

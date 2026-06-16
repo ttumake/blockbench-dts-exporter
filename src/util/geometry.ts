@@ -14,7 +14,7 @@ export function toVec3(vector: ArrayVector3): Vec3 {
 export function transformVec3(vec: Vec3, orientation: ExportOrientation): Vec3 {
   switch (orientation) {
     case 'blockland_swap_yz_flip_xz':
-      return [-vec[0], -vec[2], vec[1]];
+      return [vec[0], -vec[2], vec[1]];
     case 'none':
     default:
       return [...vec];
@@ -32,7 +32,7 @@ function triangulateFaceIndices(vertexStart: number, vertexCount: number): numbe
 }
 
 function orientationFlipsWinding(orientation: ExportOrientation): boolean {
-  return orientation === 'blockland_swap_yz_flip_xz';
+  return false;
 }
 
 function flipMeshWinding(mesh: ExportMesh): ExportMesh {
