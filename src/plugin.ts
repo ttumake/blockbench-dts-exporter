@@ -2,8 +2,14 @@
 
 import { collectModel } from './blockbench/collect-model';
 import { showExportDialog } from './export/dialog';
+import torqueSvg from '../torque.svg';
+import torqueLogoSvg from '../torque-logo.svg';
 import type { ExportTextureAsset } from './util/materials';
-import { PLUGIN_SNAPSHOT, PLUGIN_VERSION } from './version';
+import { PLUGIN_VERSION } from './version';
+
+const TORQUE_ICON = `data:image/svg+xml;utf8,${encodeURIComponent(torqueSvg)}`;
+const TORQUE_LOGO = `data:image/svg+xml;utf8,${encodeURIComponent(torqueLogoSvg)}`;
+
 
 function exportTextureAssets(basePath: string, textureAssets: ExportTextureAsset[]): void {
   const outputDirectory = PathModule.dirname(basePath);
@@ -22,20 +28,21 @@ let exportJsonAction: Action;
 BBPlugin.register('dts_exporter', {
   title: 'Torque DTS Exporter',
   author: 'Markus A. Vallin',
-  description: `Exports Blockbench models to Torque DTS format. ${PLUGIN_SNAPSHOT}`,
-  icon: 'deployed_code',
+  description: 'Exports Blockbench models to Torque DTS format.',
+  icon: TORQUE_LOGO,
+  tags: ['Exporter', 'Animation', 'Utility'],
   version: PLUGIN_VERSION,
   variant: 'desktop',
   min_version: '5.1.4',
 
   onload() {
-    console.log(`[dts_exporter] loaded v${PLUGIN_VERSION} (${PLUGIN_SNAPSHOT})`);
+    console.log(`[dts_exporter] loaded v${PLUGIN_VERSION}`);
 
     // Add an action to export the model as Torque DTS
     exportAction = new Action('export_torque_dts', {
       name: 'Export Torque DTS',
       description: 'Open DTS export options',
-      icon: 'deployed_code',
+      icon: TORQUE_ICON,
       click() {
         showExportDialog(Project?.name ?? 'unnamed', ({ packageData }) => {
           Filesystem.exportFile({
@@ -50,6 +57,12 @@ BBPlugin.register('dts_exporter', {
         });
       }
     });
+
+    // Add the export actions to the File > Export menu
+    MenuBar.addAction(exportAction, 'file.export');
+
+    /**
+    // Will be removed in the future, this is just a debug action to export the collected model data as JSON for testing purposes.
 
     // Add a debug action to export the model as JSON for testing
     exportJsonAction = new Action('export_json_debug', {
@@ -68,15 +81,15 @@ BBPlugin.register('dts_exporter', {
             });
         }
     });
-        
-    // Add the export actions to the File > Export menu
-    MenuBar.addAction(exportAction, 'file.export');
+
     MenuBar.addAction(exportJsonAction, 'file.export');
+
+    */
 
     },
 
     onunload() {
         exportAction.delete();
-        exportJsonAction.delete();
+        //exportJsonAction.delete();
     }
 });
