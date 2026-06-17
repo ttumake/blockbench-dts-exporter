@@ -1,0 +1,33 @@
+@@quick_start
+Quick Start
+1. Model and texture the asset in Blockbench.
+2. Add helper nodes like muzzlePoint only if the target game or script needs them.
+3. Use Mixed Materials for a blend of simple swatches and preserved source textures.
+4. Export as DTS 24 unless you specifically need DTS 25.
+
+@@export_settings
+Export Settings
+- DTS Version: DTS 24 is the default and safest option here.
+- Orientation: Blockland Orientation applies the exporter’s game-facing axis remap. None leaves the model as-is.
+- Scale: applies to geometry, helper nodes, and animation translation tracks.
+
+@@materials
+Materials
+- Mixed Materials: keeps detailed textures where needed and converts simple source textures into generated swatches.
+- Color Swatches: converts everything it can into generated swatches.
+- Full Textures: preserves source texture assets and UV layout.
+- Glow is controlled per material in the Materials tab.
+- Global flags affect every exported material unless the format handles that property per material.
+
+@@sequences
+Sequences
+- Blockbench animations are exported as DTS sequences.
+- Position, rotation, and scale tracks are supported.
+- Sequence markers are exported as triggers.
+- Keep moving parts as separate objects or clearly separated animated groups.
+
+@@lod_conventions
+LODs
+- Create groups named like detail128, detail64, detail32.
+- Keep matching object names across LOD groups so variants pair correctly.
+- If no detailNN groups are present, export falls back to a single default detail level.

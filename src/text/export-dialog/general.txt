@@ -1,0 +1,35 @@
+@@intro
+This dialog controls how the Blockbench model is normalized before writing DTS. Mode changes the texture/material strategy. Orientation and scale affect geometry, nodes, and animation tracks.
+
+@@material_flags
+Global Material Flags
+
+@@mode_mixed_materials
+Mixed Materials
+
+@@mode_color_swatches
+Color Swatches
+
+@@mode_full_textures
+Full Textures
+
+@@orientation_default
+Blockland Orientation
+
+@@orientation_none
+None
+
+@@dts_version
+DTS Version
+
+@@dts_version_24
+DTS 24
+
+@@dts_version_25
+DTS 25
+
+@@summary_with_sequences
+Collected Blockbench animations are exported into DTS sequences.
+
+@@summary_without_sequences
+No Blockbench animations were found in the current project.

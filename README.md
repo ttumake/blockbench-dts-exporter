@@ -1,11 +1,11 @@
 # blockbench-dts
 
-Blockbench plugin for exporting models to Torque/Blockland DTS.
+Blockbench plugin for exporting models to Torque DTS.
 
 ## Current Scope
 
 - Static DTS export
-- Blockland-style color material export
+- Color swatch material export
 - Atlas texture export
 - Mesh object export
 - Helper nodes like `muzzlePoint`, `ejectPoint`, `mountPoint`
@@ -41,6 +41,6 @@ Main source folders:
 
 ## Notes
 
-- The plugin is currently focused on Blockland-compatible export.
+- The plugin currently targets DTS 24 by default.
 - If no `detailNN` groups are present, export falls back to a single default detail level.
 - Reference files and sample assets are in `docs/`.

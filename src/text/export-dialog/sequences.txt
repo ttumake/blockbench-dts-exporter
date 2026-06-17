@@ -1,0 +1,14 @@
+@@intro_present
+Collected Blockbench animations that will be written as DTS sequences.
+
+@@intro_absent
+No Blockbench animations were found in the current project.
+
+@@markers
+Markers
+
+@@no_tracks
+No tracks
+
+@@unnamed_marker
+(unnamed)

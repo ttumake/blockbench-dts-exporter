@@ -1,0 +1,26 @@
+@@intro_color_swatches
+Color Swatches generates small texture swatches and maps each face to the full texture. Use Glow per material below.
+
+@@intro_mixed_materials
+Mixed Materials decides per source material whether to keep the real texture or collapse it to a generated color swatch. Override that decision below.
+
+@@intro_full_textures
+Full Textures exports the source texture assets and keeps atlas UVs. Glow can still be overridden per exported material.
+
+@@texture_handling
+Texture Handling
+
+@@empty_generated_materials
+No generated materials for this export.
+
+@@policy_auto
+Auto
+
+@@policy_color
+Convert to Color
+
+@@policy_texture
+Keep Texture
+
+@@glow
+Glow

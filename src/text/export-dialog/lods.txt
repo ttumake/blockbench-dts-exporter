@@ -1,0 +1,8 @@
+@@single_default_detail
+Single default detail
+
+@@explicit_detail_groups
+Explicit detailNN groups
+
+@@objects
+Objects
