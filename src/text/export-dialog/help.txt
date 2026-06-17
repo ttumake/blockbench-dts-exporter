@@ -3,11 +3,10 @@ Quick Start
 1. Model and texture the asset in Blockbench.
 2. Add helper nodes like muzzlePoint only if the target game or script needs them.
 3. Use Mixed Materials for a blend of simple swatches and preserved source textures.
-4. Export as DTS 24 unless you specifically need DTS 25.
 
 @@export_settings
 Export Settings
-- DTS Version: DTS 24 is the default and safest option here.
+- DTS Version: DTS 24 is the default and what Blockland uses.
 - Orientation: Blockland Orientation applies the exporter’s game-facing axis remap. None leaves the model as-is.
 - Scale: applies to geometry, helper nodes, and animation translation tracks.
 
