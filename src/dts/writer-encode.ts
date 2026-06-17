@@ -9,7 +9,6 @@ import {
   DTS_MATERIAL_SELF_ILLUMINATING,
   DTS_MATERIAL_S_WRAP,
   DTS_MATERIAL_T_WRAP,
-  DTS_VERSION,
   type BlocklandNodeSource,
   type DtsDetailLevel,
   type DtsMaterial,
@@ -188,9 +187,13 @@ export function synthesizeBlocklandNodes(model: ExportModel, sourceObjects: Expo
   return nodes;
 }
 
-export function encodeHeader(target: number[], finalized: ReturnType<DtsBufferWriter['finalize']>): void {
+export function encodeHeader(
+  target: number[],
+  finalized: ReturnType<DtsBufferWriter['finalize']>,
+  dtsVersion: ExportConfig['dtsVersion']
+): void {
   const header = new DataView(new ArrayBuffer(16));
-  header.setInt16(0, DTS_VERSION, true);
+  header.setInt16(0, dtsVersion, true);
   header.setInt16(2, DTS_EXPORTER_VERSION, true);
   header.setInt32(4, finalized.sizeAllDwords, true);
   header.setInt32(8, finalized.start16Dwords, true);
@@ -204,7 +207,11 @@ export function encodeSequenceBlock(target: number[]): void {
   target.push(...new Uint8Array(sequenceCount.buffer));
 }
 
-export function encodeMaterialBlock(target: number[], materials: DtsMaterial[]): void {
+export function encodeMaterialBlock(
+  target: number[],
+  materials: DtsMaterial[],
+  dtsVersion: ExportConfig['dtsVersion']
+): void {
   target.push(0x01);
 
   const countField = new DataView(new ArrayBuffer(4));
@@ -239,6 +246,12 @@ export function encodeMaterialBlock(target: number[], materials: DtsMaterial[]):
     const field = new DataView(new ArrayBuffer(4));
     field.setInt32(0, material.detailMap, true);
     target.push(...new Uint8Array(field.buffer));
+  }
+
+  if (dtsVersion === 25) {
+    for (let index = 0; index < materials.length; index += 1) {
+      target.push(0x00, 0x00, 0x00, 0x00);
+    }
   }
 
   for (const material of materials) {

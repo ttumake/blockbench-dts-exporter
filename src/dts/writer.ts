@@ -534,12 +534,12 @@ export function writeDts(model: ExportModel, config: ExportConfig): ArrayBuffer 
   const finalized = writer.finalize();
   const output: number[] = [];
 
-  encodeHeader(output, finalized);
+  encodeHeader(output, finalized, config.dtsVersion);
   output.push(...finalized.buffer32);
   output.push(...finalized.buffer16);
   output.push(...finalized.buffer8);
   writeSequenceBlock(output, sequences);
-  encodeMaterialBlock(output, materials);
+  encodeMaterialBlock(output, materials, config.dtsVersion);
 
   return Uint8Array.from(output).buffer;
 }

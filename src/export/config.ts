@@ -1,7 +1,10 @@
-export type ExportMode = 'blockland_colors' | 'atlas_textures';
+export type ExportMode = 'blockland_colors' | 'atlas_textures' | 'hybrid_textures';
+export type DtsFormatVersion = 24 | 25;
 export type ExportOrientation =
   | 'none'
   | 'blockland_swap_yz_flip_xz';
+
+export type MaterialExportPolicy = 'auto' | 'color' | 'texture';
 
 export type DtsMaterialExportFlags = {
   sWrap: boolean;
@@ -13,9 +16,11 @@ export type DtsMaterialExportFlags = {
 
 export type DtsMaterialOverride = {
   selfIlluminating?: boolean;
+  exportPolicy?: MaterialExportPolicy;
 };
 
 export type ExportConfig = {
+  dtsVersion: DtsFormatVersion;
   mode: ExportMode;
   orientation: ExportOrientation;
   scale: number;
@@ -24,7 +29,8 @@ export type ExportConfig = {
 };
 
 export const DEFAULT_EXPORT_CONFIG: ExportConfig = {
-  mode: 'blockland_colors',
+  dtsVersion: 24,
+  mode: 'hybrid_textures',
   orientation: 'blockland_swap_yz_flip_xz',
   scale: 1 / 16,
   materialFlags: {
