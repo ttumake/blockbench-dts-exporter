@@ -38,6 +38,7 @@ export type ExportFace = {
   faceKey: string;
   materialIndex: number;
   materialName: string;
+  sourceMaterialName: string;
   vertexStart: number;
   vertexCount: number;
   indexStart: number;

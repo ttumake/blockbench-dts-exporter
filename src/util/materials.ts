@@ -1,5 +1,6 @@
 type FaceTextureRef = string | false | Texture | undefined;
 import type { ExportFace, ExportMesh, ExportModel, ExportObject, Vec2 } from '../model/types';
+import type { MaterialExportPolicy } from '../export/config';
 
 export type ExportTextureAsset = {
   materialName: string;
@@ -15,10 +16,16 @@ type ColorMaterialCluster = {
   sampleCount: number;
 };
 
+type SampleProfile = {
+  average: Rgba;
+  maxChannelSpread: number;
+};
+
 const TEXTURE_BLEED_PASSES = 4;
 const BLOCKLAND_TEXTURE_SIZE = 8;
 const BLOCKLAND_COLOR_MERGE_DISTANCE_SQ = 40 * 40 * 3;
 const BLOCKLAND_COLOR_MAX_CHANNEL_DELTA = 40;
+const HYBRID_TEXTURE_COMPLEXITY_SPREAD = 24;
 
 const NAMED_COLOR_PALETTE: Array<{ name: string; color: Rgba }> = [
   { name: 'white', color: [255, 255, 255, 255] },
@@ -263,14 +270,14 @@ function getSourceFace(exportFace: ExportFace): CubeFace | MeshFace | undefined 
   return mesh?.faces[exportFace.faceKey];
 }
 
-function sampleImageRegion(
+function sampleImageRegionProfile(
   context: CanvasRenderingContext2D,
   canvas: HTMLCanvasElement,
   minX: number,
   minY: number,
   maxX: number,
   maxY: number
-): Rgba {
+): SampleProfile {
   const clampedMinX = Math.max(0, Math.min(canvas.width - 1, Math.floor(minX)));
   const clampedMaxX = Math.max(clampedMinX + 1, Math.min(canvas.width, Math.ceil(maxX)));
   const clampedMinY = Math.max(0, Math.min(canvas.height - 1, Math.floor(minY)));
@@ -287,6 +294,12 @@ function sampleImageRegion(
   let blue = 0;
   let alpha = 0;
   let samples = 0;
+  let minRed = 255;
+  let minGreen = 255;
+  let minBlue = 255;
+  let maxRed = 0;
+  let maxGreen = 0;
+  let maxBlue = 0;
 
   for (let index = 0; index < image.length; index += 4) {
     const pixelAlpha = image[index + 3];
@@ -298,35 +311,57 @@ function sampleImageRegion(
     green += image[index + 1];
     blue += image[index + 2];
     alpha += pixelAlpha;
+    minRed = Math.min(minRed, image[index]);
+    minGreen = Math.min(minGreen, image[index + 1]);
+    minBlue = Math.min(minBlue, image[index + 2]);
+    maxRed = Math.max(maxRed, image[index]);
+    maxGreen = Math.max(maxGreen, image[index + 1]);
+    maxBlue = Math.max(maxBlue, image[index + 2]);
     samples += 1;
   }
 
   if (samples === 0) {
-    return [255, 255, 255, 255];
+    return {
+      average: [255, 255, 255, 255],
+      maxChannelSpread: 0
+    };
   }
 
-  return [
-    clampByte(red / samples),
-    clampByte(green / samples),
-    clampByte(blue / samples),
-    clampByte(alpha / samples)
-  ];
+  return {
+    average: [
+      clampByte(red / samples),
+      clampByte(green / samples),
+      clampByte(blue / samples),
+      clampByte(alpha / samples)
+    ],
+    maxChannelSpread: Math.max(
+      maxRed - minRed,
+      maxGreen - minGreen,
+      maxBlue - minBlue
+    )
+  };
 }
 
-function sampleCubeFaceColor(face: CubeFace): Rgba {
+function sampleCubeFaceProfile(face: CubeFace): SampleProfile {
   const texture = getTextureByReference(face.texture);
   if (!texture) {
-    return [255, 255, 255, 255];
+    return {
+      average: [255, 255, 255, 255],
+      maxChannelSpread: 0
+    };
   }
 
   const canvas = texture.canvas;
   const context = canvas.getContext('2d');
   if (!context) {
-    return [255, 255, 255, 255];
+    return {
+      average: [255, 255, 255, 255],
+      maxChannelSpread: 0
+    };
   }
 
   const [u0, v0, u1, v1] = face.uv ?? [0, 0, 1, 1];
-  return sampleImageRegion(
+  return sampleImageRegionProfile(
     context,
     canvas,
     Math.min(u0, u1),
@@ -336,28 +371,38 @@ function sampleCubeFaceColor(face: CubeFace): Rgba {
   );
 }
 
-function sampleMeshFaceColor(face: MeshFace): Rgba {
+function sampleMeshFaceProfile(face: MeshFace): SampleProfile {
   const texture = getTextureByReference(face.texture);
   if (!texture) {
-    return [255, 255, 255, 255];
+    return {
+      average: [255, 255, 255, 255],
+      maxChannelSpread: 0
+    };
   }
 
   const canvas = texture.canvas;
   const context = canvas.getContext('2d');
   if (!context) {
-    return [255, 255, 255, 255];
+    return {
+      average: [255, 255, 255, 255],
+      maxChannelSpread: 0
+    };
   }
 
   const rect = face.getBoundingRect();
-  return sampleImageRegion(context, canvas, rect.ax ?? rect.x, rect.ay ?? rect.y, rect.bx ?? rect.x + rect.w, rect.by ?? rect.y + rect.h);
+  return sampleImageRegionProfile(context, canvas, rect.ax ?? rect.x, rect.ay ?? rect.y, rect.bx ?? rect.x + rect.w, rect.by ?? rect.y + rect.h);
 }
 
 function sampleSourceFaceColor(face: CubeFace | MeshFace): Rgba {
+  return sampleSourceFaceProfile(face).average;
+}
+
+function sampleSourceFaceProfile(face: CubeFace | MeshFace): SampleProfile {
   if (face instanceof MeshFace) {
-    return sampleMeshFaceColor(face);
+    return sampleMeshFaceProfile(face);
   }
 
-  return sampleCubeFaceColor(face);
+  return sampleCubeFaceProfile(face);
 }
 
 function remapFaceUvsToFullTexture(mesh: ExportMesh, exportFace: ExportFace): void {
@@ -497,6 +542,148 @@ export function transformModelToBlocklandColors(model: ExportModel): {
   };
 }
 
+function createColorAssetForCluster(cluster: ColorMaterialCluster): ExportTextureAsset {
+  const assetColor: Rgba = [...cluster.representativeColor];
+  return {
+    materialName: cluster.materialName,
+    fileName: `${cluster.materialName}.png`,
+    dataUrl: createSolidTextureDataUrl(assetColor)
+  };
+}
+
+function ensureColorCluster(
+  materialNameCounts: Map<string, number>,
+  colorClusters: ColorMaterialCluster[],
+  sampledColor: Rgba
+): ColorMaterialCluster {
+  const baseName = getBlocklandColorName(sampledColor);
+  let cluster = findReusableColorCluster(colorClusters, baseName, sampledColor);
+
+  if (!cluster) {
+    const nextCount = (materialNameCounts.get(baseName) ?? 0) + 1;
+    materialNameCounts.set(baseName, nextCount);
+    cluster = {
+      materialName: `${baseName}${nextCount}`,
+      baseName,
+      representativeColor: [...sampledColor],
+      sampleCount: 1
+    };
+    colorClusters.push(cluster);
+    return cluster;
+  }
+
+  cluster.representativeColor = blendColors(
+    cluster.representativeColor,
+    sampledColor,
+    cluster.sampleCount
+  );
+  cluster.sampleCount += 1;
+  return cluster;
+}
+
+function buildHybridPolicyMap(
+  objects: ExportObject[],
+  overrides: Record<string, { exportPolicy?: MaterialExportPolicy }>
+): Map<string, MaterialExportPolicy> {
+  const profilesBySourceMaterial = new Map<string, SampleProfile[]>();
+
+  for (const object of objects) {
+    for (const exportFace of object.mesh.faces) {
+      const sourceFace = getSourceFace(exportFace);
+      const sourceMaterialName = exportFace.sourceMaterialName;
+      if (!sourceMaterialName) {
+        continue;
+      }
+
+      const profiles = profilesBySourceMaterial.get(sourceMaterialName) ?? [];
+      profiles.push(sourceFace ? sampleSourceFaceProfile(sourceFace) : {
+        average: [255, 255, 255, 255],
+        maxChannelSpread: 0
+      });
+      profilesBySourceMaterial.set(sourceMaterialName, profiles);
+    }
+  }
+
+  const policyMap = new Map<string, MaterialExportPolicy>();
+
+  for (const [sourceMaterialName, profiles] of profilesBySourceMaterial) {
+    const overridePolicy = overrides[sourceMaterialName]?.exportPolicy;
+    if (overridePolicy && overridePolicy !== 'auto') {
+      policyMap.set(sourceMaterialName, overridePolicy);
+      continue;
+    }
+
+    const isComplex = profiles.some((profile) => profile.maxChannelSpread > HYBRID_TEXTURE_COMPLEXITY_SPREAD);
+    policyMap.set(sourceMaterialName, isComplex ? 'texture' : 'color');
+  }
+
+  return policyMap;
+}
+
+export function createHybridTextureExport(
+  model: ExportModel,
+  overrides: Record<string, { exportPolicy?: MaterialExportPolicy }>
+): {
+  model: ExportModel;
+  textures: ExportTextureAsset[];
+} {
+  const transformedObjects = model.shape.objects.map(cloneObject);
+  const assets = new Map<string, ExportTextureAsset>();
+  const materialNameCounts = new Map<string, number>();
+  const colorClusters: ColorMaterialCluster[] = [];
+  const policyMap = buildHybridPolicyMap(transformedObjects, overrides);
+  const sourceAssets = new Map(collectUsedTextureAssets().map((asset) => [asset.materialName, asset]));
+
+  for (const object of transformedObjects) {
+    for (const exportFace of object.mesh.faces) {
+      const sourceMaterialName = exportFace.sourceMaterialName;
+      const sourceFace = getSourceFace(exportFace);
+      const policy = policyMap.get(sourceMaterialName) ?? 'color';
+
+      if (policy === 'texture') {
+        exportFace.materialName = sourceMaterialName;
+        const sourceAsset = sourceAssets.get(sourceMaterialName);
+        if (sourceAsset) {
+          assets.set(sourceMaterialName, sourceAsset);
+        }
+        continue;
+      }
+
+      const sampledColor: Rgba = sourceFace ? sampleSourceFaceColor(sourceFace) : [255, 255, 255, 255];
+      const cluster = ensureColorCluster(materialNameCounts, colorClusters, sampledColor);
+      exportFace.materialName = cluster.materialName;
+      remapFaceUvsToFullTexture(object.mesh, exportFace);
+      assets.set(cluster.materialName, createColorAssetForCluster(cluster));
+    }
+
+    rebuildMaterialTable(object.mesh);
+  }
+
+  const transformedModel: ExportModel = {
+    ...model,
+    shape: {
+      ...model.shape,
+      objects: transformedObjects,
+      names: Array.from(
+        new Set([
+          ...model.shape.nodes.map((node) => node.name),
+          ...transformedObjects.map((object) => object.name),
+          ...transformedObjects.flatMap((object) => object.mesh.materialNames)
+        ])
+      )
+    },
+    summary: {
+      ...model.summary,
+      materialCount: new Set(transformedObjects.flatMap((object) => object.mesh.materialNames)).size
+    }
+  };
+
+  return {
+    model: transformedModel,
+    textures: Array.from(assets.values())
+  };
+}
+
 export function getMaterialNameFromTextureReference(reference: FaceTextureRef): string {
   const texture = getTextureByReference(reference);
   if (texture) {
@@ -512,6 +699,18 @@ export function getMaterialNameFromTextureReference(reference: FaceTextureRef): 
 
 export function collectUsedTextureAssets(): ExportTextureAsset[] {
   const assets = new Map<string, ExportTextureAsset>();
+  const appendTextureAsset = (texture: Texture): void => {
+    const materialName = getTextureMaterialName(texture);
+    if (assets.has(materialName)) {
+      return;
+    }
+
+    assets.set(materialName, {
+      materialName,
+      fileName: `${materialName}.png`,
+      dataUrl: getBleededTextureDataUrl(texture)
+    });
+  };
 
   for (const cube of Cube.all) {
     for (const face of Object.values(cube.faces) as CubeFace[]) {
@@ -524,17 +723,23 @@ export function collectUsedTextureAssets(): ExportTextureAsset[] {
         continue;
       }
 
-      const materialName = getTextureMaterialName(texture);
-      if (assets.has(materialName)) {
-        continue;
+      appendTextureAsset(texture);
+    }
+  }
+
+  for (const mesh of Mesh.all) {
+    mesh.forAllFaces((face) => {
+      if (!face || face.texture === null) {
+        return;
       }
 
-      assets.set(materialName, {
-        materialName,
-        fileName: `${materialName}.png`,
-        dataUrl: getBleededTextureDataUrl(texture)
-      });
-    }
+      const texture = getTextureByReference(face.texture);
+      if (!texture) {
+        return;
+      }
+
+      appendTextureAsset(texture);
+    });
   }
 
   return Array.from(assets.values());

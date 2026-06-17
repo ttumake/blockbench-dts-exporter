@@ -97,6 +97,7 @@ function appendFace(
     ...source,
     materialIndex,
     materialName,
+    sourceMaterialName: materialName,
     vertexStart,
     vertexCount: vertices.length,
     indexStart,

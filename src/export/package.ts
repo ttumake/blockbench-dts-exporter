@@ -3,13 +3,24 @@ import { writeDts } from '../dts/writer';
 import { buildLodPlan } from '../dts/writer-lod';
 import { transformModelOrientation, transformModelScale } from '../model/transform';
 import type { ExportTextureAsset } from '../util/materials';
-import { createAtlasTextureExport, transformModelToBlocklandColors } from '../util/materials';
+import {
+  createAtlasTextureExport,
+  createHybridTextureExport,
+  transformModelToBlocklandColors
+} from '../util/materials';
 import type { ExportConfig } from './config';
 
 export type BuiltExportMaterialInfo = {
   name: string;
   fileName: string;
   previewDataUrl: string;
+};
+
+export type BuiltExportSourceMaterialInfo = {
+  name: string;
+  fileName: string;
+  previewDataUrl: string;
+  exportPolicy: NonNullable<ExportConfig['materialOverrides'][string]['exportPolicy']>;
 };
 
 export type BuiltExportLodInfo = {
@@ -48,6 +59,7 @@ export type BuiltExportPackageAnalysis = {
   sequences: BuiltExportSequenceInfo[];
   textureCount: number;
   materialCount: number;
+  sourceMaterials: BuiltExportSourceMaterialInfo[];
   materials: BuiltExportMaterialInfo[];
   lod: {
     enabled: boolean;
@@ -85,10 +97,13 @@ export function buildExportPackage(projectName: string, config: ExportConfig): B
     config.scale
   );
   const lodPlan = buildLodPlan(collectedModel);
+  const sourceTextures = createAtlasTextureExport(collectedModel).textures;
   const transformed =
     config.mode === 'blockland_colors'
       ? transformModelToBlocklandColors(collectedModel)
-      : createAtlasTextureExport(collectedModel);
+      : config.mode === 'hybrid_textures'
+        ? createHybridTextureExport(collectedModel, config.materialOverrides)
+        : createAtlasTextureExport(collectedModel);
   const materialNames = transformed.textures.map((texture) => texture.materialName);
   const normalizedConfig: ExportConfig = {
     ...config,
@@ -126,6 +141,12 @@ export function buildExportPackage(projectName: string, config: ExportConfig): B
       })),
       textureCount: transformed.textures.length,
       materialCount: materialNames.length,
+      sourceMaterials: sourceTextures.map((texture) => ({
+        name: texture.materialName,
+        fileName: texture.fileName,
+        previewDataUrl: texture.dataUrl,
+        exportPolicy: config.materialOverrides[texture.materialName]?.exportPolicy ?? 'auto'
+      })),
       materials: transformed.textures.map((texture) => ({
         name: texture.materialName,
         fileName: texture.fileName,
