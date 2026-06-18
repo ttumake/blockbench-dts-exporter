@@ -23,24 +23,6 @@ Output:
 
 - `dist/dts_exporter.js`
 
-## Development
+## Usage
 
-Watch mode:
-
-```bash
-npm run watch
-```
-
-Main source folders:
-
-- `src/blockbench` Blockbench model/animation collection
-- `src/model` exporter intermediate model types and transforms
-- `src/dts` DTS writing
-- `src/export` export dialog and package building
-- `src/util` texture/material helpers
-
-## Notes
-
-- The plugin currently targets DTS 24 by default.
-- If no `detailNN` groups are present, export falls back to a single default detail level.
-- Reference files and sample assets are in `docs/`.
+Build the plugin and use blockbench's "Load Plugin from File" option to load `dist/dts_exporter.js`. The plugin will add a new export option for Torque DTS in the export dialog.

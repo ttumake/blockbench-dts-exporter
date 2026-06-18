@@ -6,7 +6,7 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "esbuild src/plugin.ts --bundle --format=iife --loader:.txt=text --loader:.svg=text --outfile=dist/dts_exporter.js",
+    "build": "esbuild src/plugin.ts --bundle --format=iife --loader:.txt=text --loader:.md=text --loader:.svg=text --outfile=dist/dts_exporter.js",
     "watch": "npm run build -- --watch"
   },
   "keywords": [],
