@@ -8,7 +8,6 @@ Quick Start
 Export Settings
 - DTS Version: DTS 24 is the default and what Blockland uses.
 - Orientation: Blockland Orientation applies the exporter’s game-facing axis remap. None leaves the model as-is.
-- Scale: applies to geometry, helper nodes, and animation translation tracks.
 
 @@materials
 Materials

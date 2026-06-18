@@ -172,8 +172,8 @@ export function buildLodPlan(model: ExportModel): DtsLodPlan {
       materialObjects: model.shape.objects.filter((object) => object.mesh.vertices.length > 0),
       detailLevels: [
         {
-          name: 'detail32',
-          size: 32,
+          name: 'detail1',
+          size: 1,
           variantsByBaseName: new Map(
             model.shape.objects
               .filter((object) => object.mesh.vertices.length > 0)

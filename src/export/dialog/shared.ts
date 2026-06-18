@@ -19,8 +19,11 @@ export type TabId = 'general' | 'materials' | 'sequences' | 'lods' | 'help';
 export type DialogState = {
   dtsVersion: ExportConfig['dtsVersion'];
   mode: ExportConfig['mode'];
+  exportAnimations: boolean;
+  enabledSequences: ExportConfig['enabledSequences'];
   orientation: ExportConfig['orientation'];
   scale: number;
+  textureProcessing: ExportConfig['textureProcessing'];
   materialFlags: ExportConfig['materialFlags'];
 };
 
@@ -92,7 +95,10 @@ export function cloneMaterialOverrides(overrides: MaterialOverrideMap): Material
   const clone: MaterialOverrideMap = {};
 
   for (const [name, value] of Object.entries(overrides)) {
-    clone[name] = { ...value };
+    clone[name] = {
+      ...value,
+      textureProcessing: value.textureProcessing ? { ...value.textureProcessing } : undefined
+    };
   }
 
   return clone;
@@ -115,8 +121,18 @@ export function readBaseConfig(state: DialogState): Omit<ExportConfig, 'material
   return {
     dtsVersion: state.dtsVersion,
     mode: state.mode,
+    exportAnimations: state.exportAnimations,
+    enabledSequences: { ...state.enabledSequences },
     orientation: state.orientation,
     scale: Number.isFinite(state.scale) && state.scale > 0 ? state.scale : DEFAULT_EXPORT_CONFIG.scale,
+    textureProcessing: {
+      bleedPasses: Number.isFinite(state.textureProcessing.bleedPasses) && state.textureProcessing.bleedPasses >= 0
+        ? Math.round(state.textureProcessing.bleedPasses)
+        : DEFAULT_EXPORT_CONFIG.textureProcessing.bleedPasses,
+      upscaleTargetSize: Number.isFinite(state.textureProcessing.upscaleTargetSize) && state.textureProcessing.upscaleTargetSize >= 1
+        ? Math.round(state.textureProcessing.upscaleTargetSize)
+        : DEFAULT_EXPORT_CONFIG.textureProcessing.upscaleTargetSize
+    },
     materialFlags: {
       sWrap: state.materialFlags.sWrap,
       tWrap: state.materialFlags.tWrap,

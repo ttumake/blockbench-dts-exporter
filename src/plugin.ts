@@ -2,6 +2,7 @@
 
 import { collectModel } from './blockbench/collect-model';
 import { showExportDialog } from './export/dialog';
+import aboutText from '../about.md';
 import torqueSvg from '../torque.svg';
 import torqueLogoSvg from '../torque-logo.svg';
 import type { ExportTextureAsset } from './util/materials';
@@ -29,6 +30,7 @@ BBPlugin.register('dts_exporter', {
   title: 'Torque DTS Exporter',
   author: 'Markus A. Vallin',
   description: 'Exports Blockbench models to Torque DTS format.',
+  about: aboutText,
   icon: TORQUE_LOGO,
   tags: ['Exporter', 'Animation', 'Utility'],
   version: PLUGIN_VERSION,

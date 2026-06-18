@@ -59,7 +59,7 @@ function writeBitSetBytes(target: number[], values: boolean[]): void {
   const buffer = new ArrayBuffer(8);
   const view = new DataView(buffer);
   const words = Math.ceil(values.length / 32);
-  view.setInt32(0, 0, true);
+  view.setInt32(0, words, true);
   view.setInt32(4, words, true);
   target.push(...new Uint8Array(buffer));
 
@@ -185,7 +185,7 @@ export function writeDts(model: ExportModel, config: ExportConfig): ArrayBuffer 
   const names = Array.from(new Set(lodPlan.detailLevels.map((detailLevel) => detailLevel.name)));
 
   if (names.length === 0) {
-    names.push('detail32');
+    names.push('detail1');
   }
   const nameIndexLookup = new Map<string, number>(names.map((name, index) => [name, index]));
 
@@ -509,6 +509,9 @@ export function writeDts(model: ExportModel, config: ExportConfig): ArrayBuffer 
   for (const state of objectStates) {
     writeObjectState(writer, state);
   }
+  writer.writeGuard();
+
+  // Decal states section: currently empty, but the guard must still be present.
   writer.writeGuard();
 
   for (const trigger of triggers) {

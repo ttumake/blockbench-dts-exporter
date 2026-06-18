@@ -1,12 +1,16 @@
 type FaceTextureRef = string | false | Texture | undefined;
 import type { ExportFace, ExportMesh, ExportModel, ExportObject, Vec2 } from '../model/types';
-import type { MaterialExportPolicy } from '../export/config';
+import type { MaterialExportPolicy, TextureProcessingConfig } from '../export/config';
 
 export type ExportTextureAsset = {
   materialName: string;
   fileName: string;
   dataUrl: string;
+  sourceWidth: number;
+  sourceHeight: number;
 };
+
+type TextureProcessingOverrideMap = Record<string, { textureProcessing?: Partial<TextureProcessingConfig> }>;
 
 type Rgba = [number, number, number, number];
 type ColorMaterialCluster = {
@@ -21,7 +25,6 @@ type SampleProfile = {
   maxChannelSpread: number;
 };
 
-const TEXTURE_BLEED_PASSES = 4;
 const BLOCKLAND_TEXTURE_SIZE = 8;
 const BLOCKLAND_COLOR_MERGE_DISTANCE_SQ = 40 * 40 * 3;
 const BLOCKLAND_COLOR_MAX_CHANNEL_DELTA = 40;
@@ -89,6 +92,20 @@ function createCanvas(width: number, height: number): HTMLCanvasElement {
   return canvas;
 }
 
+function disableImageSmoothing(context: CanvasRenderingContext2D): void {
+  context.imageSmoothingEnabled = false;
+}
+
+function resolveTextureProcessing(
+  base: TextureProcessingConfig,
+  override?: Partial<TextureProcessingConfig>
+): TextureProcessingConfig {
+  return {
+    bleedPasses: Math.max(0, Math.round(override?.bleedPasses ?? base.bleedPasses)),
+    upscaleTargetSize: Math.max(1, Math.round(override?.upscaleTargetSize ?? base.upscaleTargetSize))
+  };
+}
+
 function cloneImageData(source: Uint8ClampedArray): Uint8ClampedArray {
   const copy = new Uint8ClampedArray(source.length);
   copy.set(source);
@@ -148,7 +165,7 @@ function bleedTransparentPixels(imageData: ImageData, passes: number, context: C
   return output;
 }
 
-function getBleededTextureDataUrl(texture: Texture): string {
+function getBleededTextureDataUrl(texture: Texture, processing: TextureProcessingConfig): string {
   const sourceCanvas = texture.canvas;
   const workingCanvas = createCanvas(sourceCanvas.width, sourceCanvas.height);
   const context = workingCanvas.getContext('2d');
@@ -157,12 +174,44 @@ function getBleededTextureDataUrl(texture: Texture): string {
     return texture.getDataURL();
   }
 
+  disableImageSmoothing(context);
   context.drawImage(sourceCanvas, 0, 0);
   const sourceImageData = context.getImageData(0, 0, workingCanvas.width, workingCanvas.height);
-  const bledImageData = bleedTransparentPixels(sourceImageData, TEXTURE_BLEED_PASSES, context);
+  const bledImageData = bleedTransparentPixels(sourceImageData, processing.bleedPasses, context);
   context.putImageData(bledImageData, 0, 0);
 
-  return workingCanvas.toDataURL('image/png');
+  const maxDimension = Math.max(workingCanvas.width, workingCanvas.height);
+  if (maxDimension >= processing.upscaleTargetSize) {
+    return workingCanvas.toDataURL('image/png');
+  }
+
+  const scale = processing.upscaleTargetSize / Math.max(1, maxDimension);
+  const targetWidth = Math.max(1, Math.round(workingCanvas.width * scale));
+  const targetHeight = Math.max(1, Math.round(workingCanvas.height * scale));
+  if (targetWidth === workingCanvas.width && targetHeight === workingCanvas.height) {
+    return workingCanvas.toDataURL('image/png');
+  }
+
+  const upscaledCanvas = createCanvas(targetWidth, targetHeight);
+  const upscaledContext = upscaledCanvas.getContext('2d');
+  if (!upscaledContext) {
+    return workingCanvas.toDataURL('image/png');
+  }
+
+  disableImageSmoothing(upscaledContext);
+  upscaledContext.drawImage(
+    workingCanvas,
+    0,
+    0,
+    workingCanvas.width,
+    workingCanvas.height,
+    0,
+    0,
+    upscaledCanvas.width,
+    upscaledCanvas.height
+  );
+
+  return upscaledCanvas.toDataURL('image/png');
 }
 
 function colorDistance(a: Rgba, b: Rgba): number {
@@ -214,6 +263,7 @@ function createSolidTextureDataUrl(color: Rgba): string {
     return '';
   }
 
+  disableImageSmoothing(context);
   context.fillStyle = `rgba(${clampByte(color[0])}, ${clampByte(color[1])}, ${clampByte(color[2])}, ${Math.max(0, Math.min(1, color[3] / 255))})`;
   context.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -390,7 +440,15 @@ function sampleMeshFaceProfile(face: MeshFace): SampleProfile {
   }
 
   const rect = face.getBoundingRect();
-  return sampleImageRegionProfile(context, canvas, rect.ax ?? rect.x, rect.ay ?? rect.y, rect.bx ?? rect.x + rect.w, rect.by ?? rect.y + rect.h);
+  
+  return sampleImageRegionProfile(
+    context, 
+    canvas, 
+    rect.ax ?? rect.x, 
+    rect.ay ?? rect.y, 
+    rect.bx ?? rect.x + rect.w, 
+    rect.by ?? rect.y + rect.h
+  );
 }
 
 function sampleSourceFaceColor(face: CubeFace | MeshFace): Rgba {
@@ -510,7 +568,9 @@ export function transformModelToBlocklandColors(model: ExportModel): {
       assets.set(cluster.materialName, {
         materialName: cluster.materialName,
         fileName: `${cluster.materialName}.png`,
-        dataUrl: createSolidTextureDataUrl(assetColor)
+        dataUrl: createSolidTextureDataUrl(assetColor),
+        sourceWidth: BLOCKLAND_TEXTURE_SIZE,
+        sourceHeight: BLOCKLAND_TEXTURE_SIZE
       });
     }
 
@@ -547,7 +607,9 @@ function createColorAssetForCluster(cluster: ColorMaterialCluster): ExportTextur
   return {
     materialName: cluster.materialName,
     fileName: `${cluster.materialName}.png`,
-    dataUrl: createSolidTextureDataUrl(assetColor)
+    dataUrl: createSolidTextureDataUrl(assetColor),
+    sourceWidth: BLOCKLAND_TEXTURE_SIZE,
+    sourceHeight: BLOCKLAND_TEXTURE_SIZE
   };
 }
 
@@ -622,7 +684,8 @@ function buildHybridPolicyMap(
 
 export function createHybridTextureExport(
   model: ExportModel,
-  overrides: Record<string, { exportPolicy?: MaterialExportPolicy }>
+  overrides: Record<string, { exportPolicy?: MaterialExportPolicy; textureProcessing?: Partial<TextureProcessingConfig> }>,
+  processing: TextureProcessingConfig
 ): {
   model: ExportModel;
   textures: ExportTextureAsset[];
@@ -632,7 +695,7 @@ export function createHybridTextureExport(
   const materialNameCounts = new Map<string, number>();
   const colorClusters: ColorMaterialCluster[] = [];
   const policyMap = buildHybridPolicyMap(transformedObjects, overrides);
-  const sourceAssets = new Map(collectUsedTextureAssets().map((asset) => [asset.materialName, asset]));
+  const sourceAssets = new Map(collectUsedTextureAssets(processing).map((asset) => [asset.materialName, asset]));
 
   for (const object of transformedObjects) {
     for (const exportFace of object.mesh.faces) {
@@ -697,18 +760,24 @@ export function getMaterialNameFromTextureReference(reference: FaceTextureRef): 
   return 'blank';
 }
 
-export function collectUsedTextureAssets(): ExportTextureAsset[] {
+export function collectUsedTextureAssets(
+  processing: TextureProcessingConfig,
+  overrides: TextureProcessingOverrideMap = {}
+): ExportTextureAsset[] {
   const assets = new Map<string, ExportTextureAsset>();
   const appendTextureAsset = (texture: Texture): void => {
     const materialName = getTextureMaterialName(texture);
     if (assets.has(materialName)) {
       return;
     }
+    const effectiveProcessing = resolveTextureProcessing(processing, overrides[materialName]?.textureProcessing);
 
     assets.set(materialName, {
       materialName,
       fileName: `${materialName}.png`,
-      dataUrl: getBleededTextureDataUrl(texture)
+      dataUrl: getBleededTextureDataUrl(texture, effectiveProcessing),
+      sourceWidth: texture.canvas.width,
+      sourceHeight: texture.canvas.height
     });
   };
 
@@ -745,12 +814,16 @@ export function collectUsedTextureAssets(): ExportTextureAsset[] {
   return Array.from(assets.values());
 }
 
-export function createAtlasTextureExport(model: ExportModel): {
+export function createAtlasTextureExport(
+  model: ExportModel,
+  processing: TextureProcessingConfig,
+  overrides: TextureProcessingOverrideMap = {}
+): {
   model: ExportModel;
   textures: ExportTextureAsset[];
 } {
   return {
     model,
-    textures: collectUsedTextureAssets()
+    textures: collectUsedTextureAssets(processing, overrides)
   };
 }

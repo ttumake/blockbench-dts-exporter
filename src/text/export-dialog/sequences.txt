@@ -1,3 +1,12 @@
+@@export_toggle
+Export animations as DTS sequences
+
+@@export_enabled
+Collected Blockbench animations will be written into the DTS file.
+
+@@export_disabled
+Animations are still shown here for inspection, but no DTS sequences will be written.
+
 @@intro_present
 Collected Blockbench animations that will be written as DTS sequences.
 

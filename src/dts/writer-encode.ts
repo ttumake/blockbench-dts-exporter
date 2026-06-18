@@ -28,6 +28,17 @@ function encodeAsciiBytes(value: string): number[] {
   return bytes;
 }
 
+function validateMaterialNameLength(name: string, dtsVersion: ExportConfig['dtsVersion']): void {
+  const encodedLength = encodeAsciiBytes(name).length;
+  const limit = dtsVersion >= 26 ? 2147483647 : 255;
+
+  if (encodedLength > limit) {
+    throw new Error(
+      `Material name "${name}" is too long for DTS ${dtsVersion} (${encodedLength} bytes > ${limit}).`
+    );
+  }
+}
+
 export function buildMaterialTable(objects: ExportObject[], config: ExportConfig): DtsMaterial[] {
   const names = new Set<string>();
 
@@ -219,6 +230,7 @@ export function encodeMaterialBlock(
   target.push(...new Uint8Array(countField.buffer));
 
   for (const material of materials) {
+    validateMaterialNameLength(material.name, dtsVersion);
     const encoded = encodeAsciiBytes(material.name);
     target.push(encoded.length & 0xff);
     target.push(...encoded);

@@ -37,8 +37,14 @@ function triangulateFaceIndices(vertexStart: number, vertexCount: number): numbe
   return indices;
 }
 
-function orientationFlipsWinding(_orientation: ExportOrientation): boolean {
-  return false;
+function orientationFlipsWinding(orientation: ExportOrientation): boolean {
+  switch (orientation) {
+    case 'blockland_swap_yz_flip_xz':
+      return false;
+    case 'none':
+    default:
+      return false;
+  }
 }
 
 function flipMeshWinding(mesh: ExportMesh): ExportMesh {

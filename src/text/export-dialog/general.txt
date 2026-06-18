@@ -1,5 +1,5 @@
 @@intro
-This dialog controls how the Blockbench model is normalized before writing DTS. Mode changes the texture/material strategy. Orientation and scale affect geometry, nodes, and animation tracks.
+This dialog controls how the Blockbench model is prepared before writing DTS. Mode changes the texture/material strategy, and orientation affects geometry, nodes, and animation tracks.
 
 @@material_flags
 Global Material Flags

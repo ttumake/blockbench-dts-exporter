@@ -1,14 +1,38 @@
 @@intro_color_swatches
-Color Swatches generates small texture swatches and maps each face to the full texture. Use Glow per material below.
+Color Swatches exports generated flat-color textures.
 
 @@intro_mixed_materials
-Mixed Materials decides per source material whether to keep the real texture or collapse it to a generated color swatch. Override that decision below.
+Mixed Materials lets each source texture stay textured or collapse to a swatch.
 
 @@intro_full_textures
-Full Textures exports the source texture assets and keeps atlas UVs. Glow can still be overridden per exported material.
+Full Textures keeps the source texture assets and atlas UVs.
 
 @@texture_handling
 Texture Handling
+
+@@bleed_passes
+Bleed Passes
+
+@@upscale_target
+Upscale Target Size
+
+@@edit_texture
+Edit
+
+@@texture_editor_title
+Texture Processing
+
+@@texture_editor_intro
+Adjust how this texture is processed before export. The preview updates live and the yellow outlines show the UV islands using this texture.
+
+@@texture_editor_params
+Bleed Passes expands opaque pixels into transparent edges to reduce atlas seams. Upscale Target Size controls how large a smaller texture should be enlarged with nearest-neighbor scaling before export.
+
+@@show_uv_outlines
+Show UV outlines
+
+@@zoom
+Zoom
 
 @@empty_generated_materials
 No generated materials for this export.

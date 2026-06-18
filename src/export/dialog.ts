@@ -24,8 +24,11 @@ export function showExportDialog(projectName: string, onConfirmExport: ConfirmCa
   const state: DialogState = {
     dtsVersion: DEFAULT_EXPORT_CONFIG.dtsVersion,
     mode: DEFAULT_EXPORT_CONFIG.mode,
+    exportAnimations: DEFAULT_EXPORT_CONFIG.exportAnimations,
+    enabledSequences: { ...DEFAULT_EXPORT_CONFIG.enabledSequences },
     orientation: DEFAULT_EXPORT_CONFIG.orientation,
     scale: DEFAULT_EXPORT_CONFIG.scale,
+    textureProcessing: { ...DEFAULT_EXPORT_CONFIG.textureProcessing },
     materialFlags: { ...DEFAULT_EXPORT_CONFIG.materialFlags }
   };
   let currentOverrides = cloneMaterialOverrides(DEFAULT_EXPORT_CONFIG.materialOverrides);
@@ -47,8 +50,16 @@ export function showExportDialog(projectName: string, onConfirmExport: ConfirmCa
     currentConfig = buildConfig(state, currentOverrides);
 
     renderGeneral(tabPanels.general, state, currentConfig, currentPackage, refresh);
-    renderMaterials(tabPanels.materials, currentPackage, currentOverrides, refresh);
-    renderSequences(tabPanels.sequences, currentPackage.analysis.sequences);
+    renderMaterials(
+      tabPanels.materials,
+      state,
+      currentPackage,
+      () => currentPackage,
+      () => currentOverrides,
+      currentOverrides,
+      refresh
+    );
+    renderSequences(tabPanels.sequences, state, currentPackage.analysis.sequences, refresh);
     renderLods(tabPanels.lods, currentPackage.analysis.lod);
     renderHelp(tabPanels.help);
   };

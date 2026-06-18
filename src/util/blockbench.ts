@@ -31,13 +31,16 @@ export function getCubeFaceUv(face: CubeFace): Vec2[] {
 }
 
 export function getMeshFaceVertexKeys(face: MeshFace): string[] {
-  return face.getSortedVertices();
+  return face.vertices.slice();
 }
 
 export function getMeshFaceUv(face: MeshFace, vertexKeys: string[]): Vec2[] {
   return vertexKeys.map((vertexKey) => {
     const uv = face.uv[vertexKey] ?? [0, 0];
-    return normalizeUv([uv[0], uv[1]], face.texture);
+    const [u, v] = normalizeUv([uv[0], uv[1]], face.texture);
+    // Mesh UVs from imported geometry already behave like bottom-left-origin data.
+    // DTS export flips V later for all tverts, so cancel that here for meshes.
+    return [u, 1 - v];
   });
 }
 

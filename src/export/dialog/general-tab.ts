@@ -1,4 +1,3 @@
-import { DEFAULT_EXPORT_CONFIG } from '../config';
 import type { BuiltExportPackage } from '../package';
 import {
   createCardNode,
@@ -70,20 +69,6 @@ export function renderGeneral(
   });
   orientationLabel.append(orientationSelect);
 
-  const scaleLabel = createControlLabel('Scale');
-  const scaleInput = document.createElement('input');
-  scaleInput.type = 'number';
-  scaleInput.min = '0.0001';
-  scaleInput.step = '0.01';
-  scaleInput.value = String(state.scale);
-  scaleInput.addEventListener('change', () => {
-    const nextScale = Number(scaleInput.value);
-    state.scale = Number.isFinite(nextScale) && nextScale > 0 ? nextScale : DEFAULT_EXPORT_CONFIG.scale;
-    scaleInput.value = String(state.scale);
-    onChange();
-  });
-  scaleLabel.append(scaleInput);
-
   const flagsWrap = document.createElement('div');
   flagsWrap.style.display = 'grid';
   flagsWrap.style.gap = '6px';
@@ -123,7 +108,7 @@ export function renderGeneral(
   addFlag('neverEnvMap', 'Never EnvMap');
   flagsWrap.append(flagGrid);
 
-  controls.append(modeLabel, versionLabel, orientationLabel, scaleLabel, flagsWrap);
+  controls.append(modeLabel, versionLabel, orientationLabel, flagsWrap);
 
   const stats = createStatsGrid();
   const statEntries = [
@@ -159,8 +144,6 @@ export function renderGeneral(
         currentConfig.orientation === 'blockland_swap_yz_flip_xz' ?
         generalText.orientation_default : generalText.orientation_none
       }`,
-    `Scale: ${currentConfig.scale}`,
-    '',
     'Global material flags:',
     `- S Wrap: ${currentConfig.materialFlags.sWrap}`,
     `- T Wrap: ${currentConfig.materialFlags.tWrap}`,

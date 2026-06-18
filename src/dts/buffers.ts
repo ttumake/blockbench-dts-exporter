@@ -74,7 +74,7 @@ export class DtsBufferWriter {
     this.writeInt16(0);
     this.writeInt16(0);
     this.writeInt16(0);
-    this.writeInt16(0);
+    this.writeInt16((-32767) & 0xffff);
   }
 
   writeQuat16(value: [number, number, number, number]): void {
