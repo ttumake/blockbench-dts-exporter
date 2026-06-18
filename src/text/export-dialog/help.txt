@@ -6,23 +6,22 @@ Quick Start
 
 @@export_settings
 Export Settings
-- DTS Version: DTS 24 is the default and what Blockland uses.
+- DTS Version: DTS 24 is the default and what Blockland uses. (dts25 is untested doesnt work in blockland)
 - Orientation: Blockland Orientation applies the exporter’s game-facing axis remap. None leaves the model as-is.
 
 @@materials
 Materials
 - Mixed Materials: keeps detailed textures where needed and converts simple source textures into generated swatches.
 - Color Swatches: converts everything it can into generated swatches.
-- Full Textures: preserves source texture assets and UV layout.
+- Full Textures: preserves source texture assets and UV layout. (full texture has known issues)
 - Glow is controlled per material in the Materials tab.
 - Global flags affect every exported material unless the format handles that property per material.
 
 @@sequences
 Sequences
 - Blockbench animations are exported as DTS sequences.
-- Position, rotation, and scale tracks are supported.
-- Sequence markers are exported as triggers.
-- Keep moving parts as separate objects or clearly separated animated groups.
+- Position, rotation, and scale tracks are supported. (scale untested)
+- Sequence markers are exported as triggers. (untested)
 
 @@lod_conventions
 LODs
