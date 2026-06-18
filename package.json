@@ -1,6 +1,6 @@
 {
   "name": "blockbench-dts-exporter",
-  "version": "1.0.0",
+  "version": "0.4.0",
   "author": "Markus A. Vallin",
   "description": "",
   "main": "index.js",
